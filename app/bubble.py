@@ -42,10 +42,15 @@ class Bubble(QWidget):
         self._setup_window()
         self._setup_button()
         self._restore_position()
+        self.apply_opacity()
 
     # ------------------------------------------------------------------
     # Public
     # ------------------------------------------------------------------
+
+    def apply_opacity(self) -> None:
+        opacity = float(self._config.get("bubble_opacity") or 1.0)
+        self.setWindowOpacity(max(0.2, min(1.0, opacity)))
 
     def set_panel(self, panel: QWidget) -> None:
         self._panel = panel

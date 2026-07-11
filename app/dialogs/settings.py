@@ -43,6 +43,7 @@ class SettingsDialog(QDialog):
         config: AppConfig,
         lock_manager: LockManager,
         panel: QWidget | None = None,
+        bubble: QWidget | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -56,6 +57,7 @@ class SettingsDialog(QDialog):
         self._config = config
         self._lock_mgr = lock_manager
         self._panel = panel
+        self._bubble = bubble
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -92,6 +94,18 @@ class SettingsDialog(QDialog):
 
         form = QFormLayout()
         form.setSpacing(8)
+
+        # Bubble opacity
+        bubble_row = QHBoxLayout()
+        self._bubble_slider = QSlider(Qt.Orientation.Horizontal)
+        self._bubble_slider.setRange(20, 100)
+        self._bubble_slider.setValue(int(float(self._config.get("bubble_opacity") or 1.0) * 100))
+        self._bubble_lbl = QLabel(f"{self._bubble_slider.value()}%")
+        self._bubble_lbl.setFixedWidth(36)
+        self._bubble_slider.valueChanged.connect(self._on_bubble_opacity_changed)
+        bubble_row.addWidget(self._bubble_slider)
+        bubble_row.addWidget(self._bubble_lbl)
+        form.addRow("Bubble opacity:", bubble_row)
 
         # Default category
         self._default_cat_combo = QComboBox()
@@ -162,6 +176,12 @@ class SettingsDialog(QDialog):
 
     def _on_default_cat_changed(self, text: str) -> None:
         self._config.set("default_category", "" if text == "(none)" else text)
+
+    def _on_bubble_opacity_changed(self, value: int) -> None:
+        self._bubble_lbl.setText(f"{value}%")
+        self._config.set("bubble_opacity", value / 100.0)
+        if self._bubble and hasattr(self._bubble, "apply_opacity"):
+            self._bubble.apply_opacity()
 
     def _on_opacity_changed(self, value: int) -> None:
         self._opacity_lbl.setText(f"{value}%")
