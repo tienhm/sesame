@@ -1,6 +1,6 @@
 # Open Sesame
 
-> Open Source **Se**crets **Sa**fe **Me**moriser
+> Open **Se**crets **Sa**fe **Me**moriser
 
 A lightweight Windows desktop application for quick access to frequently used passwords and secrets, displayed through a floating bubble that stays on top of all windows.
 
