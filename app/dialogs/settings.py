@@ -1,0 +1,624 @@
+"""Settings dialog — General, Categories, Security tabs."""
+
+from __future__ import annotations
+
+from PySide6.QtCore import Qt, QPoint, QRect, Signal
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QSlider,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+import os
+
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+
+from app.config import AppConfig
+from app.models.vault import Vault
+from app.utils.lock_manager import LockManager
+from app.utils.startup import disable_startup, enable_startup, is_startup_enabled
+
+_LOCK_ICON   = "🔒"
+_UNLOCK_ICON = "🔓"
+
+
+class SettingsDialog(QDialog):
+    def __init__(
+        self,
+        vault: Vault,
+        config: AppConfig,
+        lock_manager: LockManager,
+        panel: QWidget | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.setWindowFlags(
+            Qt.WindowType.Dialog
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setMinimumSize(420, 340)
+        self._vault = vault
+        self._config = config
+        self._lock_mgr = lock_manager
+        self._panel = panel
+        self._build_ui()
+
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 12)
+
+        self._tabs = QTabWidget()
+        self._tabs.addTab(self._build_general_tab(), "General")
+        self._tabs.addTab(self._build_categories_tab(), "Categories")
+        self._tabs.addTab(self._build_security_tab(), "Security")
+        layout.addWidget(self._tabs)
+
+        close_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        close_btn.rejected.connect(self.accept)
+        layout.addWidget(close_btn)
+
+    # ── General tab ────────────────────────────────────────────────────
+
+    def _build_general_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setSpacing(12)
+
+        self._startup_cb = QCheckBox("Start with Windows")
+        self._startup_cb.setChecked(is_startup_enabled())
+        self._startup_cb.toggled.connect(self._on_startup_toggled)
+        layout.addWidget(self._startup_cb)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        # Default category
+        self._default_cat_combo = QComboBox()
+        self._default_cat_combo.addItem("(none)")
+        for cat in sorted(self._vault.categories()):
+            self._default_cat_combo.addItem(cat)
+        saved = self._config.get("default_category", "")
+        idx = self._default_cat_combo.findText(saved) if saved else 0
+        self._default_cat_combo.setCurrentIndex(max(0, idx))
+        self._default_cat_combo.currentTextChanged.connect(self._on_default_cat_changed)
+        form.addRow("Default category:", self._default_cat_combo)
+
+        # Panel opacity
+        opacity_row = QHBoxLayout()
+        self._opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self._opacity_slider.setRange(0, 100)
+        self._opacity_slider.setValue(int(float(self._config.get("panel_component_opacity") or 1.0) * 100))
+        has_image = bool(self._config.get("panel_bg_image", ""))
+        self._opacity_slider.setEnabled(has_image)
+        self._opacity_slider.setTickInterval(10)
+        self._opacity_lbl = QLabel(f"{self._opacity_slider.value()}%")
+        self._opacity_lbl.setFixedWidth(36)
+        self._opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        opacity_row.addWidget(self._opacity_slider)
+        opacity_row.addWidget(self._opacity_lbl)
+        form.addRow("Components opacity:", opacity_row)
+
+        layout.addLayout(form)
+
+        # Background image
+        bg_label = QLabel("Background image")
+        bg_label.setStyleSheet("font-weight: 600; color: #e8eaed; margin-top: 8px;")
+        layout.addWidget(bg_label)
+
+        bg_row = QHBoxLayout()
+        self._bg_path_lbl = QLabel(self._short_path(self._config.get("panel_bg_image", "")))
+        self._bg_path_lbl.setStyleSheet("color: #adb5bd; font-size: 11px;")
+        self._bg_path_lbl.setWordWrap(True)
+        bg_browse_btn = QPushButton("Browse…")
+        bg_browse_btn.setMinimumWidth(90)
+        bg_browse_btn.clicked.connect(self._browse_bg_image)
+        bg_clear_btn = QPushButton("Clear")
+        bg_clear_btn.setMinimumWidth(70)
+        bg_clear_btn.clicked.connect(self._clear_bg_image)
+        bg_row.addWidget(self._bg_path_lbl, stretch=1)
+        bg_row.addWidget(bg_browse_btn)
+        bg_row.addWidget(bg_clear_btn)
+        layout.addLayout(bg_row)
+
+        self._crop_widget = _ImageCropWidget()
+        self._crop_widget.set_image(
+            self._config.get("panel_bg_image", ""),
+            float(self._config.get("panel_bg_offset_x") or 0.5),
+            float(self._config.get("panel_bg_offset_y") or 0.5),
+        )
+        self._crop_widget.offset_changed.connect(self._on_crop_offset_changed)
+        layout.addWidget(self._crop_widget)
+
+        layout.addStretch()
+        return w
+
+    def _on_startup_toggled(self, checked: bool) -> None:
+        if checked:
+            enable_startup()
+        else:
+            disable_startup()
+        self._startup_cb.setChecked(is_startup_enabled())
+
+    def _on_default_cat_changed(self, text: str) -> None:
+        self._config.set("default_category", "" if text == "(none)" else text)
+
+    def _on_opacity_changed(self, value: int) -> None:
+        self._opacity_lbl.setText(f"{value}%")
+        self._config.set("panel_component_opacity", value / 100.0)
+        self._apply_panel_appearance()
+
+    def _browse_bg_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Background Image", "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)"
+        )
+        if path:
+            self._config.set("panel_bg_image", path)
+            self._config.set("panel_bg_offset_x", 0.5)
+            self._config.set("panel_bg_offset_y", 0.5)
+            self._bg_path_lbl.setText(self._short_path(path))
+            self._crop_widget.set_image(path, 0.5, 0.5)
+            self._opacity_slider.setEnabled(True)
+            self._apply_panel_appearance()
+
+    def _clear_bg_image(self) -> None:
+        self._config.set("panel_bg_image", "")
+        self._bg_path_lbl.setText("(none)")
+        self._crop_widget.set_image("", 0.5, 0.5)
+        self._opacity_slider.setEnabled(False)
+        self._apply_panel_appearance()
+
+    def _on_crop_offset_changed(self, ox: float, oy: float) -> None:
+        self._config.set("panel_bg_offset_x", ox)
+        self._config.set("panel_bg_offset_y", oy)
+        self._apply_panel_appearance()
+
+    def _apply_panel_appearance(self) -> None:
+        if self._panel and hasattr(self._panel, "apply_appearance"):
+            self._panel.apply_appearance(self._config)
+
+    @staticmethod
+    def _short_path(path: str) -> str:
+        if not path:
+            return "(none)"
+        return os.path.basename(path) if len(path) > 40 else path
+
+    # ── Categories tab ─────────────────────────────────────────────────
+
+    def _build_categories_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(8)
+
+        self._cat_list = QListWidget()
+        self._cat_list.currentRowChanged.connect(self._on_cat_row_changed)
+        layout.addWidget(self._cat_list)
+
+        btn_row = QHBoxLayout()
+        self._rename_btn = QPushButton("Rename…")
+        self._rename_btn.setEnabled(False)
+        self._rename_btn.clicked.connect(self._rename_category)
+        self._delete_cat_btn = QPushButton("Delete…")
+        self._delete_cat_btn.setEnabled(False)
+        self._delete_cat_btn.clicked.connect(self._delete_category)
+        btn_row.addWidget(self._rename_btn)
+        btn_row.addWidget(self._delete_cat_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        self._refresh_cat_list()
+        return w
+
+    def _refresh_cat_list(self) -> None:
+        self._cat_list.clear()
+        for cat in sorted(self._vault.categories()):
+            self._cat_list.addItem(cat)
+
+    def _on_cat_row_changed(self, row: int) -> None:
+        enabled = row >= 0
+        self._rename_btn.setEnabled(enabled)
+        self._delete_cat_btn.setEnabled(enabled)
+
+    def _rename_category(self) -> None:
+        item = self._cat_list.currentItem()
+        if not item:
+            return
+        old = item.text()
+        new, ok = QInputDialog.getText(self, "Rename Category", "New name:", text=old)
+        new = new.strip()
+        if ok and new and new != old:
+            self._vault.rename_category(old, new)
+            self._lock_mgr.rename_category(old, new)
+            # Update default category setting if needed
+            if self._config.get("default_category") == old:
+                self._config.set("default_category", new)
+            self._refresh_cat_list()
+            self._refresh_security_list()
+            self._refresh_default_cat_combo()
+
+    def _delete_category(self) -> None:
+        item = self._cat_list.currentItem()
+        if not item:
+            return
+        cat = item.text()
+        self._vault.delete_category(cat, "General")
+        self._lock_mgr.remove_lock(cat)
+        if self._config.get("default_category") == cat:
+            self._config.set("default_category", "")
+        self._refresh_cat_list()
+        self._refresh_security_list()
+        self._refresh_default_cat_combo()
+
+    # ── Security tab ───────────────────────────────────────────────────
+
+    def _build_security_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(10)
+
+        # Master password section
+        pw_label = QLabel("Master password")
+        pw_label.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(pw_label)
+
+        pw_btn_row = QHBoxLayout()
+        self._set_master_btn = QPushButton("Set / Change…")
+        self._set_master_btn.clicked.connect(self._set_master_password)
+        self._remove_master_btn = QPushButton("Remove…")
+        self._remove_master_btn.clicked.connect(self._remove_master_password)
+        self._remove_master_btn.setEnabled(self._lock_mgr.has_master_password())
+        pw_btn_row.addWidget(self._set_master_btn)
+        pw_btn_row.addWidget(self._remove_master_btn)
+        pw_btn_row.addStretch()
+        layout.addLayout(pw_btn_row)
+
+        self._pw_status = QLabel(self._master_pw_status_text())
+        self._pw_status.setStyleSheet("color: #adb5bd; font-size: 11px;")
+        layout.addWidget(self._pw_status)
+
+        # Category lock list
+        cats_label = QLabel("Protected categories")
+        cats_label.setStyleSheet("font-weight: 600; color: #e8eaed; margin-top: 6px;")
+        layout.addWidget(cats_label)
+
+        hint = QLabel("Copying from these categories will require the master password.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #adb5bd; font-size: 11px;")
+        layout.addWidget(hint)
+
+        self._sec_list = QListWidget()
+        layout.addWidget(self._sec_list, stretch=1)
+
+        self._refresh_security_list()
+        return w
+
+    def _master_pw_status_text(self) -> str:
+        return "✔  Master password is set." if self._lock_mgr.has_master_password() \
+               else "✘  No master password set — categories cannot be locked."
+
+    def _set_master_password(self) -> None:
+        if self._lock_mgr.has_master_password() and not self._verify_current():
+            return
+        dlg = _SetPasswordDialog("master password", self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._lock_mgr.set_master_password(dlg.password())
+            self._update_pw_buttons()
+            self._refresh_security_list()
+
+    def _remove_master_password(self) -> None:
+        dlg = _RemovePasswordDialog(self)
+        while dlg.exec() == _RemovePasswordDialog.VERIFIED:
+            if self._lock_mgr.verify(dlg.password()):
+                self._lock_mgr.remove_master_password()
+                self._update_pw_buttons()
+                self._refresh_security_list()
+                return
+            dlg._error.setText("Wrong password.")
+
+    def _update_pw_buttons(self) -> None:
+        has_pw = self._lock_mgr.has_master_password()
+        self._pw_status.setText(self._master_pw_status_text())
+        self._remove_master_btn.setEnabled(has_pw)
+
+    def _verify_current(self) -> bool:
+        dlg = UnlockDialog("master password", self)
+        dlg.setWindowTitle("Verify Current Password")
+        while dlg.exec() == QDialog.DialogCode.Accepted:
+            if self._lock_mgr.verify(dlg.password()):
+                return True
+            dlg.set_error("Wrong password.")
+        return False
+
+    def _refresh_security_list(self) -> None:
+        self._sec_list.clear()
+        has_pw = self._lock_mgr.has_master_password()
+        locked = self._lock_mgr.locked_categories()
+        for cat in sorted(self._vault.categories()):
+            item = QListWidgetItem(cat)
+            item.setData(Qt.ItemDataRole.UserRole, cat)
+            item.setFlags(
+                item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+            )
+            state = Qt.CheckState.Checked if cat in locked else Qt.CheckState.Unchecked
+            item.setCheckState(state)
+            if not has_pw:
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+            self._sec_list.addItem(item)
+        self._sec_list.itemChanged.connect(self._on_cat_lock_toggled)
+
+    def _on_cat_lock_toggled(self, item: QListWidgetItem) -> None:
+        cat = item.data(Qt.ItemDataRole.UserRole)
+        if item.checkState() == Qt.CheckState.Checked:
+            self._lock_mgr.add_locked_category(cat)
+        else:
+            self._lock_mgr.remove_locked_category(cat)
+
+    # ------------------------------------------------------------------
+
+    def _refresh_default_cat_combo(self) -> None:
+        saved = self._config.get("default_category", "")
+        self._default_cat_combo.blockSignals(True)
+        self._default_cat_combo.clear()
+        self._default_cat_combo.addItem("(none)")
+        for cat in sorted(self._vault.categories()):
+            self._default_cat_combo.addItem(cat)
+        idx = self._default_cat_combo.findText(saved) if saved else 0
+        self._default_cat_combo.setCurrentIndex(max(0, idx))
+        self._default_cat_combo.blockSignals(False)
+
+
+# ---------------------------------------------------------------------------
+# Helper dialogs
+# ---------------------------------------------------------------------------
+
+class _SetPasswordDialog(QDialog):
+    def __init__(self, category: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Set Password — {category}")
+        self.setMinimumWidth(320)
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        self._pw = QLineEdit()
+        self._pw.setEchoMode(QLineEdit.EchoMode.Password)
+        self._pw_confirm = QLineEdit()
+        self._pw_confirm.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("Password:", self._pw)
+        form.addRow("Confirm:", self._pw_confirm)
+        layout.addLayout(form)
+
+        self._error = QLabel("")
+        self._error.setStyleSheet("color: #e74c3c;")
+        layout.addWidget(self._error)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self._ok_btn = btns.button(QDialogButtonBox.StandardButton.Ok)
+        self._ok_btn.setEnabled(False)
+        btns.accepted.connect(self._on_accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+        self._pw.textChanged.connect(self._validate)
+        self._pw_confirm.textChanged.connect(self._validate)
+
+    def _validate(self) -> None:
+        pw, conf = self._pw.text(), self._pw_confirm.text()
+        if conf and pw != conf:
+            self._error.setText("Passwords do not match.")
+            self._ok_btn.setEnabled(False)
+        else:
+            self._error.setText("")
+            self._ok_btn.setEnabled(bool(pw) and pw == conf)
+
+    def _on_accept(self) -> None:
+        if self._pw.text() == self._pw_confirm.text() and self._pw.text():
+            self.accept()
+
+    def password(self) -> str:
+        return self._pw.text()
+
+
+class UnlockDialog(QDialog):
+    """Shown when the user tries to copy from a locked category."""
+
+    def __init__(self, category: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Locked Category")
+        self.setWindowFlags(
+            Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setMinimumWidth(300)
+        layout = QVBoxLayout(self)
+
+        lbl = QLabel(f'🔒  <b>{category}</b> is protected.<br>Enter the master password to continue.')
+        lbl.setTextFormat(Qt.TextFormat.RichText)
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        form = QFormLayout()
+        self._pw = QLineEdit()
+        self._pw.setEchoMode(QLineEdit.EchoMode.Password)
+        self._pw.setPlaceholderText("Master password")
+        form.addRow("Password:", self._pw)
+        layout.addLayout(form)
+
+        self._error = QLabel("")
+        self._error.setStyleSheet("color: #e74c3c;")
+        layout.addWidget(self._error)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self._ok_btn = btns.button(QDialogButtonBox.StandardButton.Ok)
+        self._ok_btn.setEnabled(False)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+        self._pw.textChanged.connect(lambda t: self._ok_btn.setEnabled(bool(t)))
+
+    def set_error(self, msg: str) -> None:
+        self._error.setText(msg)
+
+    def password(self) -> str:
+        return self._pw.text()
+
+
+class _ImageCropWidget(QWidget):
+    """Preview image with a draggable viewport (fixed 480:400 aspect ratio).
+
+    Drag the viewport to choose which part of the image is shown in the panel.
+    Emits offset_changed(ox, oy) — normalised 0.0–1.0.
+    """
+
+    offset_changed = Signal(float, float)
+
+    _ASPECT = 480 / 400
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._pixmap: QPixmap = QPixmap()
+        self._offset_x: float = 0.5
+        self._offset_y: float = 0.5
+        self._drag_start: QPoint | None = None
+        self._drag_ox: float = 0.5
+        self._drag_oy: float = 0.5
+        self.setFixedHeight(160)
+        self.setMinimumWidth(200)
+        self.setMouseTracking(True)
+
+    def set_image(self, path: str, ox: float = 0.5, oy: float = 0.5) -> None:
+        self._pixmap = QPixmap(path) if path and os.path.exists(path) else QPixmap()
+        self._offset_x, self._offset_y = ox, oy
+        self.update()
+
+    def _vp_rect(self) -> QRect:
+        w, h = self.width(), self.height()
+        vp_h = int(h * 0.82)
+        vp_w = int(vp_h * self._ASPECT)
+        if vp_w > int(w * 0.95):
+            vp_w = int(w * 0.95)
+            vp_h = int(vp_w / self._ASPECT)
+        mx, my = w - vp_w, h - vp_h
+        return QRect(int(mx * self._offset_x), int(my * self._offset_y), vp_w, vp_h)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        w, h = self.width(), self.height()
+        if self._pixmap.isNull():
+            painter.fillRect(self.rect(), QColor("#1e1f26"))
+            painter.setPen(QColor("#3a3b47"))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "No image selected")
+            painter.end()
+            return
+        scaled = self._pixmap.scaled(w, h,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation)
+        painter.drawPixmap(0, 0, scaled,
+                           (scaled.width() - w) // 2,
+                           (scaled.height() - h) // 2, w, h)
+        vp = self._vp_rect()
+        dark = QColor(0, 0, 0, 120)
+        painter.fillRect(QRect(0, 0, w, vp.top()), dark)
+        painter.fillRect(QRect(0, vp.bottom(), w, h - vp.bottom()), dark)
+        painter.fillRect(QRect(0, vp.top(), vp.left(), vp.height()), dark)
+        painter.fillRect(QRect(vp.right(), vp.top(), w - vp.right(), vp.height()), dark)
+        painter.setPen(QPen(QColor("#5865f2"), 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(vp)
+        painter.setPen(QColor(255, 255, 255, 160))
+        painter.drawText(vp, Qt.AlignmentFlag.AlignCenter, "drag")
+        painter.end()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._vp_rect().contains(event.pos()):
+            self._drag_start = event.pos()
+            self._drag_ox, self._drag_oy = self._offset_x, self._offset_y
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_start is not None:
+            vp = self._vp_rect()
+            w, h = self.width(), self.height()
+            mx, my = w - vp.width(), h - vp.height()
+            d = event.pos() - self._drag_start
+            if mx > 0:
+                self._offset_x = max(0.0, min(1.0, self._drag_ox + d.x() / mx))
+            if my > 0:
+                self._offset_y = max(0.0, min(1.0, self._drag_oy + d.y() / my))
+            self.update()
+            self.offset_changed.emit(self._offset_x, self._offset_y)
+        else:
+            self.setCursor(Qt.CursorShape.OpenHandCursor
+                           if self._vp_rect().contains(event.pos())
+                           else Qt.CursorShape.ArrowCursor)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_start = None
+        self.setCursor(Qt.CursorShape.OpenHandCursor
+                       if self._vp_rect().contains(event.pos())
+                       else Qt.CursorShape.ArrowCursor)
+
+
+class _RemovePasswordDialog(QDialog):
+    """Remove master password — requires current password."""
+
+    VERIFIED = 1
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Remove Master Password")
+        self.setMinimumWidth(320)
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        self._pw = QLineEdit()
+        self._pw.setEchoMode(QLineEdit.EchoMode.Password)
+        self._pw.setPlaceholderText("Current master password")
+        form.addRow("Password:", self._pw)
+        layout.addLayout(form)
+
+        self._error = QLabel("")
+        self._error.setStyleSheet("color: #e74c3c;")
+        layout.addWidget(self._error)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self._ok_btn = btns.button(QDialogButtonBox.StandardButton.Ok)
+        self._ok_btn.setText("Remove")
+        self._ok_btn.setEnabled(False)
+        btns.accepted.connect(self._on_remove)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+        self._pw.textChanged.connect(lambda t: self._ok_btn.setEnabled(bool(t)))
+
+    def _on_remove(self) -> None:
+        self.done(self.VERIFIED)
+
+    def password(self) -> str:
+        return self._pw.text()
