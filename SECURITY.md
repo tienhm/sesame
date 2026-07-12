@@ -10,9 +10,9 @@
 
 **Please do not report security vulnerabilities through public GitHub Issues.**
 
-If you discover a security vulnerability, please report it privately by emailing:
+Use GitHub's private vulnerability reporting instead:
 
-**minhtien.hoang@comexis.net**
+👉 **[Report a vulnerability](https://github.com/tienhm/sesame/security/advisories/new)**
 
 Include as much detail as possible:
 - Description of the vulnerability
