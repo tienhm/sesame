@@ -373,6 +373,7 @@ class VaultPanel(QWidget):
             self.setStyleSheet(f"""
                 QWidget        {{ background-color: transparent; }}
                 #SearchBar     {{ background-color: rgba(46,47,58,{a}); }}
+                #EntryList     {{ background-color: rgba(30,31,38,{a}); }}
                 #TagList       {{ background-color: rgba(30,31,38,{a}); }}
                 #CategoryCombo {{ background-color: rgba(46,47,58,{a}); }}
                 #ToolbarButton {{ background-color: rgba(46,47,58,{a}); }}
@@ -529,7 +530,8 @@ class VaultPanel(QWidget):
 
             countdown = None
             if active_id == entry.id:
-                countdown = self._clipboard.active_entry_id and None  # will be updated by tick
+                countdown = (self._clipboard._remaining
+                             if active_id == entry.id else None)
 
             row_widget = EntryRowWidget(entry, countdown)
             row_widget.copy_user_requested.connect(self._on_copy_user_requested)
@@ -584,7 +586,8 @@ class VaultPanel(QWidget):
             return
         if not self._ensure_unlocked(entry):
             return
-        self._clipboard.copy(entry_id, self._vault.get_secret(entry_id))
+        secret = self._vault.get_secret(entry_id) or ""
+        self._clipboard.copy(entry_id, secret)
 
     def _ensure_unlocked(self, entry: Entry) -> bool:
         if not self._lock_mgr.is_locked(entry.category):

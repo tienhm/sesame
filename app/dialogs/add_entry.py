@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import random
+import secrets
 import string
 
 from PySide6.QtCore import Qt
@@ -360,7 +360,7 @@ class PasswordGeneratorDialog(QDialog):
         if special: chars += "!@#$%^&*()-_=+[]{}|;:,.<>?"
         if not chars:
             chars = string.ascii_lowercase
-        self._preview.setText("".join(random.choice(chars) for _ in range(length)))
+        self._preview.setText("".join(secrets.choice(chars) for _ in range(length)))
 
     def password(self) -> str:
         return self._preview.text()

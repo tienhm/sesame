@@ -99,6 +99,13 @@ class SesameApp:
         self._panel.quit_requested.connect(self.quit_app)
         self._panel.restore_requested.connect(self._on_restore)
 
+        # Bubble countdown mirror — connect once here, not inside _on_restore
+        self._clipboard.countdown_tick.connect(self._on_clipboard_tick)
+        self._clipboard.cleared.connect(self._on_clipboard_cleared)
+
+        # Apply appearance and default category on startup
+        self._panel.apply_appearance(self._config)
+        self._apply_default_category()
 
     def _on_clipboard_tick(self, entry_id: str, seconds: int) -> None:
         """Mirror countdown on bubble when panel is hidden."""
@@ -117,14 +124,6 @@ class SesameApp:
         # If a countdown is already running, show it on bubble immediately
         if self._clipboard.active_entry_id and self._clipboard._remaining > 0:
             self._bubble.show_countdown(self._clipboard._remaining)
-
-        # Bubble countdown mirror
-        self._clipboard.countdown_tick.connect(self._on_clipboard_tick)
-        self._clipboard.cleared.connect(self._on_clipboard_cleared)
-
-        # Apply appearance (opacity + background image) on startup
-        self._panel.apply_appearance(self._config)
-        self._apply_default_category()
 
         # Enable startup on first run (default ON)
         ensure_startup_enabled()
@@ -155,6 +154,7 @@ class SesameApp:
     def open_donate(self) -> None:
         """Open the sponsor / donation page."""
         from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl("https://github.com/sponsors/tienhm"))
 
     def open_settings(self) -> None:
