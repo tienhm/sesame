@@ -13,6 +13,7 @@ a = Analysis(
     datas=[
         ("resources/style.qss", "resources"),
         ("resources/icon.png", "resources"),
+        ("resources/fa-solid-900.ttf", "resources"),
     ],
     hiddenimports=[
         "keyring.backends.Windows",

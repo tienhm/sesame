@@ -1,4 +1,4 @@
-# Open Sesame
+# Open SeSaMe  `v1.0`
 
 > Open **Se**crets **Sa**fe **Me**moriser
 
@@ -14,10 +14,10 @@ No administrator privileges required. Suitable for standard corporate user accou
 - **Vault panel** — title bar with ⊙ restore and ✕ close; draggable by the caption; real-time search, category filter, and tag filter
 - **Tags** — attach multiple comma-separated tags to each entry; filter by one or more tags (AND logic) using the left panel
 - **URL field** — optional URL per entry; shown as a clickable link that opens the default browser
-- **Copy to clipboard** — 👤 copies username (flash feedback), 🔑 copies password with 30-second auto-clear countdown
+- **Copy to clipboard** — 👤 copies username (flash feedback), 🔑 copies password with 30-second auto-clear countdown; neither is stored in Windows Clipboard History (Win+V)
 - **In-row edit** — ✏️ button on each entry opens the edit dialog directly; existing secret is pre-loaded
 - **Password generator** — 🎲 button in the edit dialog opens a generator with configurable length, character sets (letters, digits, special); options are remembered between opens
-- **Single instance** — launching a second instance signals the first to flash the bubble at screen centre
+- **Single instance** — launching a second instance (or using *Locate Open Sesame* in the tray) signals the first to flash the bubble at screen centre
 - **Categories** — organize entries into named groups; rename or delete via Settings
 - **Default category** — configure a category to be pre-selected on startup
 - **Background image** — set a custom photo as the panel background; drag the viewport to choose which region to display; adjust component opacity so the image shows through the UI
@@ -150,11 +150,11 @@ The entry is created automatically on first launch. It can be toggled in **Setti
 
 When you click 🔑 on an entry:
 
-1. The secret is placed on the clipboard.
-2. A 30-second countdown appears on the button.
+1. The secret is placed on the clipboard, **excluded from Windows Clipboard History** (Win+V).
+2. A 30-second countdown appears on the button — and on the bubble if the panel is closed.
 3. After 30 seconds the clipboard is cleared automatically.
 
-Clicking 👤 copies the username without a countdown — a brief ✓ flash confirms the copy.
+Clicking 👤 copies the username (also excluded from Win+V) — a brief ✓ flash confirms the copy.
 
 ---
 
@@ -207,10 +207,10 @@ The panel has a title bar at the top with two buttons on the right:
 
 | Button | Action |
 |---|---|
-| ⊙ | Restore to bubble mode — hides the panel and shows the bubble |
-| ✕ | Close the panel — panel hides, bubble stays hidden, app runs in tray |
+| ⊙ | Restore to bubble mode — hides panel, shows bubble at the button's position |
+| ✕ | Close panel — panel hides, bubble stays hidden, app runs in tray |
 
-Drag the title bar to reposition the panel anywhere on screen.
+Drag the title bar to reposition the panel. The ⊙ and ✕ buttons in the toolbar (bottom right) also provide quick access.
 
 ### Background image
 
@@ -224,12 +224,12 @@ In **Settings → General**:
 
 Right-click the tray icon for quick access to:
 
-- Show / Hide Bubble
-- Add New Entry…
-- Settings…
-- Export Vault…
-- Import Vault…
-- Exit Open Sesame
+| Item | Action |
+|---|---|
+| Show Bubble / Hide Bubble | Toggle the floating bubble (disabled while panel is open) |
+| Locate Open Sesame | Flash the bubble at screen centre |
+| ❤ Support Open Sesame | Open the sponsor page |
+| Exit Open Sesame | Quit the app |
 
 ---
 

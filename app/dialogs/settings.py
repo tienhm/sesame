@@ -32,8 +32,9 @@ from app.models.vault import Vault
 from app.utils.lock_manager import LockManager
 from app.utils.startup import disable_startup, enable_startup, is_startup_enabled
 
-_LOCK_ICON   = "🔒"
-_UNLOCK_ICON = "🔓"
+from app.utils.icons import FA as _FA
+_LOCK_ICON   = _FA.LOCK
+_UNLOCK_ICON = _FA.UNLOCK
 
 
 class SettingsDialog(QDialog):
@@ -47,7 +48,12 @@ class SettingsDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        try:
+            from main import __version__ as _ver
+            _title = f"Settings — Open Sesame {_ver}"
+        except Exception:
+            _title = "Settings"
+        self.setWindowTitle(_title)
         self.setWindowFlags(
             Qt.WindowType.Dialog
             | Qt.WindowType.WindowStaysOnTopHint

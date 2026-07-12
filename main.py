@@ -5,6 +5,8 @@ Wires together: Vault, ClipboardManager, Bubble, VaultPanel, TrayIcon.
 
 from __future__ import annotations
 
+__version__ = "1.0"
+
 import ctypes
 import logging
 import os
@@ -18,6 +20,7 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QSystemTrayIcon
 
 from app.bubble import Bubble
+from app.utils.icons import load as _load_fa_font
 from app.config import AppConfig
 from app.dialogs.add_entry import AddEditEntryDialog
 from app.dialogs.export_import import ExportDialog, ImportPasswordDialog
@@ -85,7 +88,7 @@ class SesameApp:
         self._bubble.set_panel(self._panel)
 
         self._tray = TrayIcon(self._icon, self)
-        self._tray.setToolTip("Open Sesame")
+        self._tray.setToolTip(f"Open Sesame {__version__}")
         self._tray.show()
 
         # Connect panel signals
@@ -97,13 +100,27 @@ class SesameApp:
         self._panel.restore_requested.connect(self._on_restore)
 
 
+    def _on_clipboard_tick(self, entry_id: str, seconds: int) -> None:
+        """Mirror countdown on bubble when panel is hidden."""
+        if not self._panel.isVisible() and self._bubble.isVisible():
+            self._bubble.show_countdown(seconds)
+
+    def _on_clipboard_cleared(self, entry_id: str) -> None:
+        self._bubble.clear_countdown()
+
     def _on_restore(self, btn_center) -> None:
-        # Center the bubble on the restore button's position
         half = self._bubble.width() // 2
         self._bubble.move(btn_center.x() - half, btn_center.y() - half)
         self._bubble._save_position()
         self._panel.hide()
         self._bubble.show()
+        # If a countdown is already running, show it on bubble immediately
+        if self._clipboard.active_entry_id and self._clipboard._remaining > 0:
+            self._bubble.show_countdown(self._clipboard._remaining)
+
+        # Bubble countdown mirror
+        self._clipboard.countdown_tick.connect(self._on_clipboard_tick)
+        self._clipboard.cleared.connect(self._on_clipboard_cleared)
 
         # Apply appearance (opacity + background image) on startup
         self._panel.apply_appearance(self._config)
@@ -130,6 +147,15 @@ class SesameApp:
             self._vault.add_entry(entry, secret)
             self._panel.refresh()
 
+
+    def locate_bubble(self) -> None:
+        """Flash the bubble at screen centre — same effect as a second instance."""
+        self._bubble.flash_and_center()
+
+    def open_donate(self) -> None:
+        """Open the sponsor / donation page."""
+        from PySide6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl("https://github.com/sponsors/tienhm"))
 
     def open_settings(self) -> None:
         dlg = SettingsDialog(self._vault, self._config, self._lock_mgr,
@@ -288,7 +314,8 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setApplicationName("Open Sesame")
-    app.setApplicationDisplayName("Open Sesame")
+    app.setApplicationDisplayName(f"Open Sesame {__version__}")
+    app.setApplicationVersion(__version__)
     app.setQuitOnLastWindowClosed(False)  # keep alive when panel/bubble closed
 
     # ── Single-instance guard ─────────────────────────────────────────
@@ -310,6 +337,7 @@ def main() -> None:
     ipc_server.listen(_IPC_SERVER_NAME)
 
     _load_stylesheet(app)
+    _load_fa_font()
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(None, "Open Sesame", "System tray is not available on this desktop.")

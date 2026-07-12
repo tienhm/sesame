@@ -46,9 +46,11 @@ from app.models.vault import Vault
 from app.utils.clipboard import ClipboardManager
 from app.utils.lock_manager import LockManager
 
-_COPY_USER = "\U0001f464"    # 👤
-_EDIT      = "✏️" # ✏️
-_COPY_PASS = "\U0001f511"   # 🔑
+from app.utils.icons import FA
+
+_COPY_USER = FA.USER
+_EDIT      = FA.PEN
+_COPY_PASS = FA.KEY
 
 _PANEL_WIDTH = 480
 _PANEL_HEIGHT = 430
@@ -222,11 +224,16 @@ class VaultPanel(QWidget):
         caption.setContentsMargins(2, 0, 0, 0)
         caption.setSpacing(4)
 
-        title_lbl = QLabel("Open Sesame")
+        try:
+            from main import __version__ as _ver
+            _caption = f"Open Sesame  {_ver}"
+        except Exception:
+            _caption = "Open Sesame"
+        title_lbl = QLabel(_caption)
         title_lbl.setObjectName("CaptionTitle")
         caption.addWidget(title_lbl, stretch=1)
 
-        self._restore_btn = QPushButton("⊙")
+        self._restore_btn = QPushButton(FA.CIRCLE_DOT)
         self._restore_btn.setObjectName("ToolbarIcon")
         self._restore_btn.setFixedSize(24, 24)
         self._restore_btn.setToolTip("Back to bubble")
@@ -234,18 +241,11 @@ class VaultPanel(QWidget):
 
         root.addLayout(caption)
 
-        # ── Search bar ────────────────────────────────────────────────
-        self._search = QLineEdit()
-        self._search.setObjectName("SearchBar")
-        self._search.setPlaceholderText("Search secrets…")
-        self._search.setClearButtonEnabled(True)
-        root.addWidget(self._search)
-
-        # ── Body (left panel + entry list) ────────────────────────────
+        # ── Body: left column (combo + tags) | right column (search + entries)
         body = QHBoxLayout()
         body.setSpacing(8)
 
-        # Left panel: category combo + tag list
+        # Left column: category combo + tag list
         left = QVBoxLayout()
         left.setSpacing(4)
         left.setContentsMargins(0, 0, 0, 0)
@@ -264,12 +264,24 @@ class VaultPanel(QWidget):
 
         body.addLayout(left)
 
-        # Entry list
+        # Right column: search bar (same row as combo) + entry list below
+        right = QVBoxLayout()
+        right.setSpacing(4)
+        right.setContentsMargins(0, 0, 0, 0)
+
+        self._search = QLineEdit()
+        self._search.setObjectName("SearchBar")
+        self._search.setPlaceholderText("Search secrets…")
+        self._search.setClearButtonEnabled(True)
+        right.addWidget(self._search)
+
         self._entry_list = QListWidget()
         self._entry_list.setObjectName("EntryList")
         self._entry_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._entry_list.setSpacing(2)
-        body.addWidget(self._entry_list, stretch=1)
+        right.addWidget(self._entry_list, stretch=1)
+
+        body.addLayout(right, stretch=1)
 
         root.addLayout(body, stretch=1)
 
@@ -291,19 +303,19 @@ class VaultPanel(QWidget):
         self._del_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._del_btn.setEnabled(False)
 
-        self._sponsor_btn = QPushButton("♥")
-        self._sponsor_btn.setObjectName("ToolbarIcon")
+        self._sponsor_btn = QPushButton(FA.HEART)
+        self._sponsor_btn.setObjectName("SponsorBtn")
         self._sponsor_btn.setFixedSize(28, 28)
         self._sponsor_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._sponsor_btn.setToolTip("Support Open Sesame")
 
-        self._settings_btn = QPushButton("⚙")
+        self._settings_btn = QPushButton(FA.GEAR)
         self._settings_btn.setObjectName("ToolbarIcon")
         self._settings_btn.setFixedSize(28, 28)
         self._settings_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._settings_btn.setToolTip("Settings")
 
-        self._close_btn = QPushButton("✕")
+        self._close_btn = QPushButton(FA.XMARK)
         self._close_btn.setObjectName("ToolbarIcon")
         self._close_btn.setFixedSize(28, 28)
         self._close_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))

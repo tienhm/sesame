@@ -6,6 +6,7 @@ import random
 import string
 
 from PySide6.QtCore import Qt
+from app.utils.icons import FA
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -25,9 +26,9 @@ from PySide6.QtWidgets import (
 from app.models.entry import Entry
 from app.models.vault import Vault
 
-_EYE_SHOW = "👁"    # password hidden  → click to reveal
-_EYE_HIDE = "🙈"    # password visible → click to hide
-_GENERATE  = "🎲"   # generate password
+_EYE_SHOW = FA.EYE
+_EYE_HIDE = FA.EYE_SLASH
+_GENERATE  = FA.DICE
 
 
 class AddEditEntryDialog(QDialog):
@@ -318,7 +319,7 @@ class PasswordGeneratorDialog(QDialog):
         self._preview.setReadOnly(True)
         self._preview.setStyleSheet("font-family: monospace; font-size: 13px;")
 
-        reroll_btn = QPushButton("↻")
+        reroll_btn = QPushButton(FA.ROTATE)
         reroll_btn.setObjectName("DialogIcon")
         reroll_btn.setFixedSize(32, 32)
         reroll_btn.setToolTip("Regenerate")

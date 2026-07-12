@@ -49,6 +49,21 @@ class Bubble(QWidget):
     # Public
     # ------------------------------------------------------------------
 
+    def show_countdown(self, seconds: int) -> None:
+        """Show countdown on bubble when panel is hidden."""
+        self._btn.setText(f"{seconds}s")
+        self._btn.setStyleSheet(
+            "QPushButton { background-color: #2d6a4f; border-radius: 24px; "
+            "border: 2px solid #1a4a35; font-size: 13px; color: #d8f3dc; "
+            "font-family: 'Segoe UI'; font-weight: 600; }"
+        )
+
+    def clear_countdown(self) -> None:
+        """Restore bubble to normal icon."""
+        from app.utils.icons import FA
+        self._btn.setText(FA.KEY)
+        self._btn.setStyleSheet("")
+
     def apply_opacity(self) -> None:
         opacity = float(self._config.get("bubble_opacity") or 1.0)
         self.setWindowOpacity(max(0.2, min(1.0, opacity)))
@@ -73,16 +88,15 @@ class Bubble(QWidget):
 
     def _do_blink(self) -> None:
         self._blink_count += 1
-        if self._blink_count > 12:   # 12 × 250 ms = 3 s
+        if self._blink_count > 12:
             self._blink_timer.stop()
             self._blink_count = 0
-            self._btn.setStyleSheet("")   # restore normal style
+            self._btn.setStyleSheet("")
             return
-        # Toggle button background between orange and default purple
         if self._blink_count % 2 == 1:
             self._btn.setStyleSheet(
                 "QPushButton { background-color: #ff8800; border-radius: 24px; "
-                "border: 2px solid #ff6600; font-size: 20px; }"
+                "border: 2px solid #ff6600; font-family: 'Font Awesome 6 Free Solid'; }"
             )
         else:
             self._btn.setStyleSheet("")
@@ -97,6 +111,7 @@ class Bubble(QWidget):
             self._panel.hide()
             self.show()
         else:
+            self.clear_countdown()   # restore key icon before hiding
             self._reposition_panel()
             self._panel.show()
             self._panel.raise_()
@@ -117,7 +132,8 @@ class Bubble(QWidget):
         self.setFixedSize(_BUBBLE_SIZE, _BUBBLE_SIZE)
 
     def _setup_button(self) -> None:
-        self._btn = QPushButton("🔑", self)
+        from app.utils.icons import FA
+        self._btn = QPushButton(FA.KEY, self)
         self._btn.setObjectName("BubbleButton")
         self._btn.setFixedSize(_BUBBLE_SIZE, _BUBBLE_SIZE)
         self._btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))

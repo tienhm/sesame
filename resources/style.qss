@@ -44,9 +44,10 @@ QWidget {
     background-color: #2e2f3a;
     border: 1px solid #3a3b47;
     border-radius: 6px;
-    padding: 4px 6px;
+    padding: 6px 6px;
     color: #e8eaed;
-    font-size: 12px;
+    font-size: 13px;
+    min-height: 16px;
 }
 #CategoryCombo:focus {
     border-color: #5865f2;
@@ -136,6 +137,30 @@ QWidget {
     background-color: #2d6a4f;
     border-color: #2d6a4f;
     color: #d8f3dc;
+    font-family: "Segoe UI";
+    font-size: 10px;
+    font-weight: 600;
+}
+
+/* ── Font Awesome on icon buttons ───────────────────────── */
+#CopyButton, #ToolbarIcon, #SponsorBtn, #DialogIcon, #BubbleButton {
+    font-family: "Font Awesome 6 Free Solid";
+}
+
+/* ── Sponsor / heart button ──────────────────────────────── */
+#SponsorBtn {
+    background-color: #2e2f3a;
+    border: 1px solid #3a3b47;
+    border-radius: 6px;
+    padding: 0px;
+    color: #868e96;
+    font-size: 14px;
+    min-width: 28px; max-width: 28px;
+    min-height: 28px; max-height: 28px;
+}
+#SponsorBtn:hover {
+    background-color: #3d3e4f;
+    color: #e74c3c;
 }
 
 /* ── Dialog icon buttons (👁 🎲 ↻ in forms) ─────────────── */
