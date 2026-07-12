@@ -138,6 +138,78 @@ QWidget {
     color: #d8f3dc;
 }
 
+/* ── Dialog icon buttons (👁 🎲 ↻ in forms) ─────────────── */
+#DialogIcon {
+    background-color: #2e2f3a;
+    border: 1px solid #3a3b47;
+    border-radius: 6px;
+    padding: 0px;
+    color: #e8eaed;
+    font-size: 16px;
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 32px;
+    max-height: 32px;
+}
+#DialogIcon:hover  { background-color: #3d3e4f; }
+#DialogIcon:checked {
+    background-color: #5865f2;
+    border-color: #5865f2;
+}
+
+/* ── SpinBox ─────────────────────────────────────────────── */
+QSpinBox {
+    background-color: #2e2f3a;
+    border: 1px solid #3a3b47;
+    border-radius: 6px;
+    padding: 5px 8px;
+    color: #e8eaed;
+    min-width: 56px;
+}
+QSpinBox:focus { border-color: #5865f2; }
+QSpinBox::up-button, QSpinBox::down-button {
+    width: 18px;
+    background-color: #3a3b47;
+    border: none;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #5865f2;
+}
+
+/* ── Slider ──────────────────────────────────────────────── */
+QSlider::groove:horizontal {
+    height: 4px;
+    background: #3a3b47;
+    border-radius: 2px;
+}
+QSlider::sub-page:horizontal {
+    background: #5865f2;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    background: #5865f2;
+    border-radius: 7px;
+}
+QSlider::handle:horizontal:hover { background: #4752c4; }
+
+/* ── CheckBox ────────────────────────────────────────────── */
+QCheckBox { color: #e8eaed; spacing: 6px; }
+QCheckBox::indicator {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #3a3b47;
+    border-radius: 3px;
+    background-color: #2e2f3a;
+}
+QCheckBox::indicator:checked {
+    background-color: #5865f2;
+    border-color: #5865f2;
+}
+QCheckBox::indicator:hover { border-color: #5865f2; }
+
 /* ── Toolbar icon buttons (♥ ⚙ ✕) ──────────────────────── */
 #ToolbarIcon {
     background-color: #2e2f3a;
@@ -234,12 +306,12 @@ QPushButton:pressed {
     background-color: #3c45a5;
 }
 QPushButton[flat="true"] {
-    background-color: transparent;
+    background-color: #2e2f3a;
     border: 1px solid #3a3b47;
     color: #adb5bd;
 }
 QPushButton[flat="true"]:hover {
-    background-color: #2e2f3a;
+    background-color: #3d3e4f;
     color: #e8eaed;
 }
 

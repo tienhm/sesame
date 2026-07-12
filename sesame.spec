@@ -20,6 +20,7 @@ a = Analysis(
         "cryptography.hazmat.primitives.kdf.pbkdf2",
         "cryptography.hazmat.primitives.ciphers.aead",
         "cryptography.hazmat.backends.openssl",
+        "PySide6.QtNetwork",
     ],
     hookspath=[],
     hooksconfig={},

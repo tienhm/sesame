@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import Qt, QRectF, QTimer, QUrl, Signal
+from PySide6.QtCore import Qt, QPoint, QRectF, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QColor, QCursor, QDesktopServices, QPainter, QPainterPath, QPixmap,
 )
@@ -166,7 +166,7 @@ class VaultPanel(QWidget):
     delete_requested   = Signal(str)   # entry_id
     settings_requested = Signal()
     quit_requested     = Signal()
-    restore_requested  = Signal()
+    restore_requested  = Signal(QPoint)   # global center of the restore button
 
     def __init__(
         self,
@@ -231,12 +231,6 @@ class VaultPanel(QWidget):
         self._restore_btn.setFixedSize(24, 24)
         self._restore_btn.setToolTip("Back to bubble")
         caption.addWidget(self._restore_btn)
-
-        self._caption_close_btn = QPushButton("✕")
-        self._caption_close_btn.setObjectName("ToolbarIcon")
-        self._caption_close_btn.setFixedSize(24, 24)
-        self._caption_close_btn.setToolTip("Close panel")
-        caption.addWidget(self._caption_close_btn)
 
         root.addLayout(caption)
 
@@ -309,13 +303,22 @@ class VaultPanel(QWidget):
         self._settings_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._settings_btn.setToolTip("Settings")
 
+        self._close_btn = QPushButton("✕")
+        self._close_btn.setObjectName("ToolbarIcon")
+        self._close_btn.setFixedSize(28, 28)
+        self._close_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._close_btn.setToolTip("Close panel")
+
         toolbar.addWidget(self._add_btn)
         toolbar.addWidget(self._del_btn)
         toolbar.addStretch()
         toolbar.addWidget(self._sponsor_btn)
         toolbar.addWidget(self._settings_btn)
+        toolbar.addWidget(self._close_btn)
 
         root.addLayout(toolbar)
+        # Force layout to compute widget positions so mapTo() works before first show
+        root.activate()
 
     def _connect_signals(self) -> None:
         self._search.textChanged.connect(self._apply_filter)
@@ -325,8 +328,8 @@ class VaultPanel(QWidget):
         self._add_btn.clicked.connect(self.add_requested)
         self._del_btn.clicked.connect(self._on_delete_clicked)
         self._settings_btn.clicked.connect(self.settings_requested)
-        self._restore_btn.clicked.connect(self.restore_requested)
-        self._caption_close_btn.clicked.connect(self.hide)
+        self._restore_btn.clicked.connect(self._on_restore_clicked)
+        self._close_btn.clicked.connect(self.hide)
 
         self._clipboard.countdown_tick.connect(self._on_countdown_tick)
         self._clipboard.cleared.connect(self._on_clipboard_cleared)
@@ -545,6 +548,10 @@ class VaultPanel(QWidget):
     # ------------------------------------------------------------------
     # Toolbar actions
     # ------------------------------------------------------------------
+
+    def _on_restore_clicked(self) -> None:
+        center = self._restore_btn.mapToGlobal(self._restore_btn.rect().center())
+        self.restore_requested.emit(center)
 
     def _on_delete_clicked(self) -> None:
         eid = self._selected_entry_id()

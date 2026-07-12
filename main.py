@@ -5,6 +5,7 @@ Wires together: Vault, ClipboardManager, Bubble, VaultPanel, TrayIcon.
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import os
 import sys
@@ -12,7 +13,7 @@ import sys
 # ── Make sure the project root is on sys.path when running from source ──
 sys.path.insert(0, os.path.dirname(__file__))
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QSystemTrayIcon
 
@@ -95,7 +96,12 @@ class SesameApp:
         self._panel.quit_requested.connect(self.quit_app)
         self._panel.restore_requested.connect(self._on_restore)
 
-    def _on_restore(self) -> None:
+
+    def _on_restore(self, btn_center) -> None:
+        # Center the bubble on the restore button's position
+        half = self._bubble.width() // 2
+        self._bubble.move(btn_center.x() - half, btn_center.y() - half)
+        self._bubble._save_position()
         self._panel.hide()
         self._bubble.show()
 
@@ -118,7 +124,7 @@ class SesameApp:
             self._bubble.show()
 
     def open_add_entry(self) -> None:
-        dlg = AddEditEntryDialog(self._vault, parent=self._panel)
+        dlg = AddEditEntryDialog(self._vault, parent=None)
         if dlg.exec() == AddEditEntryDialog.DialogCode.Accepted:
             entry, secret = dlg.result_entry()
             self._vault.add_entry(entry, secret)
@@ -141,7 +147,7 @@ class SesameApp:
         if not self._vault.entries:
             QMessageBox.information(None, "Export Vault", "No entries to export.")
             return
-        dlg = ExportDialog(self._panel)
+        dlg = ExportDialog(None)
         if dlg.exec() != ExportDialog.DialogCode.Accepted:
             return
         path, _ = QFileDialog.getSaveFileName(
@@ -174,7 +180,7 @@ class SesameApp:
             QMessageBox.critical(None, "Import Failed", f"Cannot read file:\n{e}")
             return
 
-        dlg = ImportPasswordDialog(path, self._panel)
+        dlg = ImportPasswordDialog(path, None)
         while dlg.exec() == ImportPasswordDialog.DialogCode.Accepted:
             try:
                 entries_dicts, secrets = import_vault(file_bytes, dlg.password())
@@ -207,7 +213,7 @@ class SesameApp:
         entry = next((e for e in self._vault.entries if e.id == entry_id), None)
         if entry is None:
             return
-        dlg = AddEditEntryDialog(self._vault, entry=entry, parent=self._panel)
+        dlg = AddEditEntryDialog(self._vault, entry=entry, parent=None)
         if dlg.exec() == AddEditEntryDialog.DialogCode.Accepted:
             updated_entry, secret = dlg.result_entry()
             self._vault.update_entry(updated_entry, secret or None)
@@ -231,14 +237,48 @@ class SesameApp:
     # Run
     # ------------------------------------------------------------------
 
-    def run(self) -> int:
+    def run(self, _keep_alive=None) -> int:
         self._bubble.show()
+        # Warm up DWM compositing: show panel at opacity 0, hide, restore.
+        # This primes the WA_TranslucentBackground surface so the background
+        # image renders correctly on the first real open.
+        self._panel.setWindowOpacity(0.0)
+        self._panel.show()
+        QTimer.singleShot(0, self._finish_warmup)
         return self._qt_app.exec()
+
+    def _finish_warmup(self) -> None:
+        self._panel.hide()
+        self._panel.setWindowOpacity(1.0)
+        self._panel.apply_appearance(self._config)
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+_IPC_SERVER_NAME  = "OpenSesame_IPC"
+_MUTEX_NAME       = "Global\\OpenSesame_SingleInstance"
+_ERROR_EXISTS     = 183   # Windows ERROR_ALREADY_EXISTS
+
+
+def _acquire_mutex():
+    """Create a named mutex. Returns None if another instance already holds it."""
+    if sys.platform != "win32":
+        return object()  # non-Windows: always allow
+    handle = ctypes.windll.kernel32.CreateMutexW(None, False, _MUTEX_NAME)
+    if ctypes.windll.kernel32.GetLastError() == _ERROR_EXISTS:
+        return None
+    return handle   # keep alive in caller
+
+
+def _on_second_instance(server, controller) -> None:
+    conn = server.nextPendingConnection()
+    if conn:
+        conn.waitForReadyRead(200)
+        conn.close()
+    controller._bubble.flash_and_center()
+
 
 def main() -> None:
     # High-DPI support
@@ -251,6 +291,24 @@ def main() -> None:
     app.setApplicationDisplayName("Open Sesame")
     app.setQuitOnLastWindowClosed(False)  # keep alive when panel/bubble closed
 
+    # ── Single-instance guard ─────────────────────────────────────────
+    from PySide6.QtNetwork import QLocalServer, QLocalSocket
+    _mutex = _acquire_mutex()
+    if _mutex is None:
+        # Another instance is running — signal it and exit
+        sock = QLocalSocket()
+        sock.connectToServer(_IPC_SERVER_NAME)
+        if sock.waitForConnected(1000):
+            sock.write(b"show")
+            sock.flush()
+            sock.waitForBytesWritten(1000)
+        sys.exit(0)
+
+    # First instance — start IPC server (clean up any stale socket first)
+    QLocalServer.removeServer(_IPC_SERVER_NAME)
+    ipc_server = QLocalServer()
+    ipc_server.listen(_IPC_SERVER_NAME)
+
     _load_stylesheet(app)
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -258,7 +316,10 @@ def main() -> None:
         sys.exit(1)
 
     controller = SesameApp(app)
-    sys.exit(controller.run())
+    ipc_server.newConnection.connect(
+        lambda: _on_second_instance(ipc_server, controller)
+    )
+    sys.exit(controller.run(_mutex))
 
 
 if __name__ == "__main__":
