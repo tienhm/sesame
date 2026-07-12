@@ -15,7 +15,9 @@ No administrator privileges required. Suitable for standard corporate user accou
 - **Tags** — attach multiple comma-separated tags to each entry; filter by one or more tags (AND logic) using the left panel
 - **URL field** — optional URL per entry; shown as a clickable link that opens the default browser
 - **Copy to clipboard** — 👤 copies username (flash feedback), 🔑 copies password with 30-second auto-clear countdown
-- **In-row edit** — ✏️ button on each entry opens the edit dialog directly
+- **In-row edit** — ✏️ button on each entry opens the edit dialog directly; existing secret is pre-loaded
+- **Password generator** — 🎲 button in the edit dialog opens a generator with configurable length, character sets (letters, digits, special); options are remembered between opens
+- **Single instance** — launching a second instance signals the first to flash the bubble at screen centre
 - **Categories** — organize entries into named groups; rename or delete via Settings
 - **Default category** — configure a category to be pre-selected on startup
 - **Background image** — set a custom photo as the panel background; drag the viewport to choose which region to display; adjust component opacity so the image shows through the UI
@@ -168,13 +170,26 @@ Clicking 👤 copies the username without a countdown — a brief ✓ flash conf
 
 Fill in **Name** (required), **Username** (optional), **Secret** (required), **URL** (optional), **Tags** (optional, comma-separated), and select or type a **Category**. Click **Save**.
 
+Use the **👁** button to reveal/hide the secret, and **🎲** to open the password generator.
+
+### Password generator
+
+Click **🎲** next to the secret field to open the generator:
+- Set the desired **length** (4–64 characters)
+- Choose character sets: **Letters**, **Digits**, **Special characters**
+- The password updates live as you adjust options
+- Click **↻** to generate a new one with the same settings
+- **Use this password** applies it; **Cancel** discards
+
+Options are remembered for the session.
+
 ### Entry row buttons
 
 | Button | Action |
 |---|---|
 | 👤 | Copy username to clipboard (no auto-clear, brief ✓ feedback) |
 | 🔑 | Copy password/secret to clipboard (30 s auto-clear countdown) |
-| ✏️ | Open edit dialog for this entry |
+| ✏️ | Open edit dialog (existing secret pre-loaded) |
 
 ### Tag filtering
 
