@@ -65,7 +65,7 @@ class Bubble(QWidget):
         self._btn.setStyleSheet("")
 
     def apply_opacity(self) -> None:
-        opacity = float(self._config.get("bubble_opacity") or 1.0)
+        opacity = float(self._config.get("bubble_opacity", 1.0))
         self.setWindowOpacity(max(0.2, min(1.0, opacity)))
 
     def flash_and_center(self) -> None:

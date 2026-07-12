@@ -147,9 +147,10 @@ class ClipboardManager(QObject):
         self._remaining -= 1
         if self._remaining <= 0:
             self._timer.stop()
-            QApplication.clipboard().clear()
+            _set_clipboard_secret("")   # Win32 path keeps ExcludeClipboardContentFromMonitorProcessing
             eid = self._entry_id
             self._entry_id = ""
+            self._remaining = 0
             self.cleared.emit(eid)
         else:
             self.countdown_tick.emit(self._entry_id, self._remaining)

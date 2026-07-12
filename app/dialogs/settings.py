@@ -105,7 +105,7 @@ class SettingsDialog(QDialog):
         bubble_row = QHBoxLayout()
         self._bubble_slider = QSlider(Qt.Orientation.Horizontal)
         self._bubble_slider.setRange(20, 100)
-        self._bubble_slider.setValue(int(float(self._config.get("bubble_opacity") or 1.0) * 100))
+        self._bubble_slider.setValue(int(float(self._config.get("bubble_opacity", 1.0)) * 100))
         self._bubble_lbl = QLabel(f"{self._bubble_slider.value()}%")
         self._bubble_lbl.setFixedWidth(36)
         self._bubble_slider.valueChanged.connect(self._on_bubble_opacity_changed)
@@ -128,7 +128,7 @@ class SettingsDialog(QDialog):
         opacity_row = QHBoxLayout()
         self._opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self._opacity_slider.setRange(0, 100)
-        self._opacity_slider.setValue(int(float(self._config.get("panel_component_opacity") or 1.0) * 100))
+        self._opacity_slider.setValue(int(float(self._config.get("panel_component_opacity", 1.0)) * 100))
         has_image = bool(self._config.get("panel_bg_image", ""))
         self._opacity_slider.setEnabled(has_image)
         self._opacity_slider.setTickInterval(10)
@@ -164,8 +164,8 @@ class SettingsDialog(QDialog):
         self._crop_widget = _ImageCropWidget()
         self._crop_widget.set_image(
             self._config.get("panel_bg_image", ""),
-            float(self._config.get("panel_bg_offset_x") or 0.5),
-            float(self._config.get("panel_bg_offset_y") or 0.5),
+            float(self._config.get("panel_bg_offset_x", 0.5)),
+            float(self._config.get("panel_bg_offset_y", 0.5)),
         )
         self._crop_widget.offset_changed.connect(self._on_crop_offset_changed)
         layout.addWidget(self._crop_widget)
@@ -289,7 +289,7 @@ class SettingsDialog(QDialog):
             return
         cat = item.text()
         self._vault.delete_category(cat, "General")
-        self._lock_mgr.remove_lock(cat)
+        self._lock_mgr.remove_locked_category(cat)
         if self._config.get("default_category") == cat:
             self._config.set("default_category", "")
         self._refresh_cat_list()
@@ -334,6 +334,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(hint)
 
         self._sec_list = QListWidget()
+        self._sec_list.itemChanged.connect(self._on_cat_lock_toggled)
         layout.addWidget(self._sec_list, stretch=1)
 
         self._refresh_security_list()
@@ -377,21 +378,21 @@ class SettingsDialog(QDialog):
         return False
 
     def _refresh_security_list(self) -> None:
+        self._sec_list.blockSignals(True)
         self._sec_list.clear()
         has_pw = self._lock_mgr.has_master_password()
         locked = self._lock_mgr.locked_categories()
         for cat in sorted(self._vault.categories()):
             item = QListWidgetItem(cat)
             item.setData(Qt.ItemDataRole.UserRole, cat)
-            item.setFlags(
-                item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked if cat in locked else Qt.CheckState.Unchecked
             )
-            state = Qt.CheckState.Checked if cat in locked else Qt.CheckState.Unchecked
-            item.setCheckState(state)
             if not has_pw:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
             self._sec_list.addItem(item)
-        self._sec_list.itemChanged.connect(self._on_cat_lock_toggled)
+        self._sec_list.blockSignals(False)
 
     def _on_cat_lock_toggled(self, item: QListWidgetItem) -> None:
         cat = item.data(Qt.ItemDataRole.UserRole)
@@ -522,7 +523,9 @@ class _ImageCropWidget(QWidget):
 
     offset_changed = Signal(float, float)
 
-    _ASPECT = 480 / 400
+    _PANEL_W = 480
+    _PANEL_H = 400
+    _ASPECT  = 480 / 400
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -541,15 +544,43 @@ class _ImageCropWidget(QWidget):
         self._offset_x, self._offset_y = ox, oy
         self.update()
 
+    def _scale_info(self):
+        """Returns (panel_scale, panel_ovx, panel_ovy, preview_scale, preview_ox, preview_oy)."""
+        pw, ph = self.width(), self.height()
+        if pw == 0 or ph == 0 or self._pixmap.isNull():
+            return None
+        iw, ih = self._pixmap.width(), self._pixmap.height()
+        # Panel scale
+        ps = max(self._PANEL_W / iw, self._PANEL_H / ih)
+        p_ovx = iw * ps - self._PANEL_W   # overflow in scaled-for-panel image
+        p_ovy = ih * ps - self._PANEL_H
+        # Preview scale
+        vs = max(pw / iw, ph / ih)
+        v_ox = (iw * vs - pw) / 2          # offset that preview crops from scaled image
+        v_oy = (ih * vs - ph) / 2
+        return ps, p_ovx, p_ovy, vs, v_ox, v_oy
+
     def _vp_rect(self) -> QRect:
-        w, h = self.width(), self.height()
-        vp_h = int(h * 0.82)
-        vp_w = int(vp_h * self._ASPECT)
-        if vp_w > int(w * 0.95):
-            vp_w = int(w * 0.95)
-            vp_h = int(vp_w / self._ASPECT)
-        mx, my = w - vp_w, h - vp_h
-        return QRect(int(mx * self._offset_x), int(my * self._offset_y), vp_w, vp_h)
+        """Compute viewport rect in preview pixels representing what the panel shows."""
+        si = self._scale_info()
+        if si is None:
+            return QRect(0, 0, self.width(), self.height())
+        ps, p_ovx, p_ovy, vs, v_ox, v_oy = si
+        iw, ih = self._pixmap.width(), self._pixmap.height()
+
+        # Top-left of visible region in original image pixels
+        ix = p_ovx * self._offset_x / ps
+        iy = p_ovy * self._offset_y / ps
+        # Size of visible region in original image pixels
+        rw = self._PANEL_W / ps
+        rh = self._PANEL_H / ps
+
+        # Convert to preview pixel coords
+        px = ix * vs - v_ox
+        py = iy * vs - v_oy
+        pw = rw * vs
+        ph = rh * vs
+        return QRect(int(px), int(py), max(1, int(pw)), max(1, int(ph)))
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -587,14 +618,19 @@ class _ImageCropWidget(QWidget):
 
     def mouseMoveEvent(self, event) -> None:
         if self._drag_start is not None:
-            vp = self._vp_rect()
-            w, h = self.width(), self.height()
-            mx, my = w - vp.width(), h - vp.height()
+            si = self._scale_info()
             d = event.pos() - self._drag_start
-            if mx > 0:
-                self._offset_x = max(0.0, min(1.0, self._drag_ox + d.x() / mx))
-            if my > 0:
-                self._offset_y = max(0.0, min(1.0, self._drag_oy + d.y() / my))
+            if si is not None:
+                ps, p_ovx, p_ovy, vs, v_ox, v_oy = si
+                # Convert preview pixel delta → offset delta
+                # offset = (ix * ps) / p_ovx  where ix = (px + v_ox) / vs
+                # d_offset = d_px * ps / (p_ovx * vs)
+                if p_ovx > 0:
+                    self._offset_x = max(0.0, min(1.0,
+                        self._drag_ox + d.x() * ps / (p_ovx * vs)))
+                if p_ovy > 0:
+                    self._offset_y = max(0.0, min(1.0,
+                        self._drag_oy + d.y() * ps / (p_ovy * vs)))
             self.update()
             self.offset_changed.emit(self._offset_x, self._offset_y)
         else:

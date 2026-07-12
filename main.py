@@ -96,6 +96,7 @@ class SesameApp:
         self._panel.edit_requested.connect(self._on_edit_requested)
         self._panel.delete_requested.connect(self._on_delete_requested)
         self._panel.settings_requested.connect(self.open_settings)
+        self._panel.sponsor_requested.connect(self.open_donate)
         self._panel.quit_requested.connect(self.quit_app)
         self._panel.restore_requested.connect(self._on_restore)
 
@@ -201,7 +202,8 @@ class SesameApp:
         if not path:
             return
         try:
-            file_bytes = open(path, "rb").read()
+            with open(path, "rb") as f:
+                file_bytes = f.read()
         except Exception as e:
             QMessageBox.critical(None, "Import Failed", f"Cannot read file:\n{e}")
             return

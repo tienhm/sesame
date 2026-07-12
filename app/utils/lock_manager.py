@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from app.config import AppConfig
 
-_ITERATIONS = 100_000
+_ITERATIONS = 600_000
 _MASTER_KEY  = "master_lock"
 _CATS_KEY    = "locked_categories"
 

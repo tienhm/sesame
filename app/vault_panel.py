@@ -167,6 +167,7 @@ class VaultPanel(QWidget):
     edit_requested     = Signal(str)   # entry_id
     delete_requested   = Signal(str)   # entry_id
     settings_requested = Signal()
+    sponsor_requested  = Signal()
     quit_requested     = Signal()
     restore_requested  = Signal(QPoint)   # global center of the restore button
 
@@ -339,6 +340,7 @@ class VaultPanel(QWidget):
         self._entry_list.currentRowChanged.connect(self._on_entry_selection_changed)
         self._add_btn.clicked.connect(self.add_requested)
         self._del_btn.clicked.connect(self._on_delete_clicked)
+        self._sponsor_btn.clicked.connect(self.sponsor_requested)
         self._settings_btn.clicked.connect(self.settings_requested)
         self._restore_btn.clicked.connect(self._on_restore_clicked)
         self._close_btn.clicked.connect(self.hide)
@@ -407,9 +409,9 @@ class VaultPanel(QWidget):
     def apply_appearance(self, config: AppConfig) -> None:
         bg_path = config.get("panel_bg_image", "")
         self._bg_pixmap = QPixmap(bg_path) if bg_path and os.path.exists(bg_path) else QPixmap()
-        self._bg_offset_x = float(config.get("panel_bg_offset_x") or 0.5)
-        self._bg_offset_y = float(config.get("panel_bg_offset_y") or 0.5)
-        comp_opacity = float(config.get("panel_component_opacity") or 1.0)
+        self._bg_offset_x = float(config.get("panel_bg_offset_x", 0.5))
+        self._bg_offset_y = float(config.get("panel_bg_offset_y", 0.5))
+        comp_opacity = float(config.get("panel_component_opacity", 1.0))
         self._apply_component_opacity(comp_opacity)
         self.repaint()
 
