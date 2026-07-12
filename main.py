@@ -88,7 +88,7 @@ class SesameApp:
         self._bubble.set_panel(self._panel)
 
         self._tray = TrayIcon(self._icon, self)
-        self._tray.setToolTip(f"Open Sesame {__version__}")
+        self._tray.setToolTip(f"Sesame {__version__}")
         self._tray.show()
 
         # Connect panel signals
@@ -179,7 +179,7 @@ class SesameApp:
             return
         path, _ = QFileDialog.getSaveFileName(
             self._panel, "Save Export File", "sesame_backup.sesame",
-            "Open Sesame Vault (*.sesame)"
+            "Sesame Vault (*.sesame)"
         )
         if not path:
             return
@@ -197,7 +197,7 @@ class SesameApp:
     def import_vault(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self._panel, "Open Export File", "",
-            "Open Sesame Vault (*.sesame)"
+            "Sesame Vault (*.sesame)"
         )
         if not path:
             return
@@ -315,8 +315,8 @@ def main() -> None:
     )
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Open Sesame")
-    app.setApplicationDisplayName(f"Open Sesame {__version__}")
+    app.setApplicationName("Sesame")
+    app.setApplicationDisplayName(f"Sesame {__version__}")
     app.setApplicationVersion(__version__)
     app.setQuitOnLastWindowClosed(False)  # keep alive when panel/bubble closed
 
@@ -342,7 +342,7 @@ def main() -> None:
     _load_fa_font()
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(None, "Open Sesame", "System tray is not available on this desktop.")
+        QMessageBox.critical(None, "Sesame", "System tray is not available on this desktop.")
         sys.exit(1)
 
     controller = SesameApp(app)

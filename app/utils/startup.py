@@ -14,7 +14,7 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-_APP_NAME = "Open Sesame"
+_APP_NAME = "Sesame"
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 

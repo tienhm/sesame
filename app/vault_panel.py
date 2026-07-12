@@ -227,9 +227,9 @@ class VaultPanel(QWidget):
 
         try:
             from main import __version__ as _ver
-            _caption = f"Open Sesame  {_ver}"
+            _caption = f"Sesame  {_ver}"
         except Exception:
-            _caption = "Open Sesame"
+            _caption = "Sesame"
         title_lbl = QLabel(_caption)
         title_lbl.setObjectName("CaptionTitle")
         caption.addWidget(title_lbl, stretch=1)
@@ -308,7 +308,7 @@ class VaultPanel(QWidget):
         self._sponsor_btn.setObjectName("SponsorBtn")
         self._sponsor_btn.setFixedSize(28, 28)
         self._sponsor_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._sponsor_btn.setToolTip("Support Open Sesame")
+        self._sponsor_btn.setToolTip("Support Sesame")
 
         self._settings_btn = QPushButton(FA.GEAR)
         self._settings_btn.setObjectName("ToolbarIcon")

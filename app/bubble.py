@@ -138,7 +138,7 @@ class Bubble(QWidget):
         self._btn.setFixedSize(_BUBBLE_SIZE, _BUBBLE_SIZE)
         self._btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._btn.clicked.connect(self.toggle_panel)
-        self._btn.setToolTip("Open Sesame — click to open vault")
+        self._btn.setToolTip("Sesame — click to open vault")
         self._btn.installEventFilter(self)
 
     # ------------------------------------------------------------------

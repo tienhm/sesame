@@ -24,19 +24,19 @@ class TrayIcon(QSystemTrayIcon):
         self._show_action.triggered.connect(self._ctrl.toggle_bubble)
         menu.addAction(self._show_action)
 
-        self._locate_action = QAction("Locate Open Sesame", menu)
+        self._locate_action = QAction("Locate Sesame", menu)
         self._locate_action.triggered.connect(self._ctrl.locate_bubble)
         menu.addAction(self._locate_action)
 
         menu.addSeparator()
 
-        self._support_action = QAction("❤  Support Open Sesame", menu)
+        self._support_action = QAction("❤  Support Sesame", menu)
         self._support_action.triggered.connect(self._ctrl.open_donate)
         menu.addAction(self._support_action)
 
         menu.addSeparator()
 
-        quit_action = QAction("Exit Open Sesame", menu)
+        quit_action = QAction("Exit Sesame", menu)
         quit_action.triggered.connect(self._ctrl.quit_app)
         menu.addAction(quit_action)
 
