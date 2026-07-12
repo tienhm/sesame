@@ -26,14 +26,15 @@ You will receive a response within **72 hours**. Once the issue is confirmed, a 
 
 Security issues relevant to this project include:
 
-- Secrets leaking outside Windows Credential Manager (e.g. written to disk, logs, or memory dumps)
-- Bypass of the master password protection
-- Weaknesses in the export file encryption (AES-256-GCM / PBKDF2)
-- Clipboard not being cleared after the 30-second countdown
-- Privilege escalation or unauthorized access to vault data
+- Secrets unintentionally written to disk, logs, or temp files
+- Master password UI/logic bypass (e.g. a code path that skips the prompt)
+- Clipboard secret not cleared after the 30-second countdown due to a bug
+- Export file: incorrect use of AES-256-GCM (e.g. IV reuse, missing authentication tag check)
+- Export file: PBKDF2 iteration count or salt handling bug that weakens the derived key
 
 ## Out of Scope
 
+- Theoretical breaks of AES-256-GCM or PBKDF2 as algorithms — these are handled by the upstream `cryptography` library
 - Vulnerabilities requiring physical access to an already unlocked Windows session (Windows DPAPI is the trust boundary)
 - Social engineering attacks
 - Denial of service against the local application
