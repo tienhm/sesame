@@ -3,3 +3,5 @@ keyring>=24.0
 cryptography>=42.0
 pyinstaller>=6.0
 pillow>=10.0
+click>=8.0
+inquirer>=3.0

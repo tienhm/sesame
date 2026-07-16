@@ -501,8 +501,13 @@ class VaultPanel(QWidget):
         self._tag_list.blockSignals(False)
 
     def _on_tag_clicked(self, item: QListWidgetItem) -> None:
-        tag = item.text() if item.isSelected() else ""
-        self._selected_tags = {tag} if tag else set()
+        tag = item.text()
+        if self._selected_tags == {tag}:
+            # Clicking the already-selected tag → deselect → show all
+            self._tag_list.clearSelection()
+            self._selected_tags = set()
+        else:
+            self._selected_tags = {tag}
         self._rebuild_entries()
 
     # ------------------------------------------------------------------
