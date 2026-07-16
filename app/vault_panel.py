@@ -260,7 +260,7 @@ class VaultPanel(QWidget):
         self._tag_list.setObjectName("TagList")
         self._tag_list.setFixedWidth(110)
         self._tag_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._tag_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self._tag_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         left.addWidget(self._tag_list, stretch=1)
 
         body.addLayout(left)
@@ -280,6 +280,8 @@ class VaultPanel(QWidget):
         self._entry_list.setObjectName("EntryList")
         self._entry_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._entry_list.setSpacing(2)
+        self._entry_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+        self._entry_list.setDefaultDropAction(Qt.DropAction.MoveAction)
         right.addWidget(self._entry_list, stretch=1)
 
         body.addLayout(right, stretch=1)
@@ -340,6 +342,7 @@ class VaultPanel(QWidget):
         self._entry_list.currentRowChanged.connect(self._on_entry_selection_changed)
         self._add_btn.clicked.connect(self.add_requested)
         self._del_btn.clicked.connect(self._on_delete_clicked)
+        self._entry_list.model().rowsMoved.connect(self._on_rows_moved)
         self._sponsor_btn.clicked.connect(self.sponsor_requested)
         self._settings_btn.clicked.connect(self.settings_requested)
         self._restore_btn.clicked.connect(self._on_restore_clicked)
@@ -364,19 +367,20 @@ class VaultPanel(QWidget):
             self._cat_combo.setCurrentIndex(idx)
 
     def _apply_component_opacity(self, opacity: float) -> None:
-        a = int(max(0.0, min(1.0, opacity)) * 255)
+        a  = int(max(0.0, min(1.0, opacity)) * 255)
+        # Selected items are 30% more opaque for clear visual feedback
+        a2 = min(255, a + 76)
         if opacity >= 0.99:
             self.setStyleSheet("")
             vp_style = ""
         else:
-            # First make ALL widget backgrounds transparent,
-            # then restore rgba for widgets that should remain visible.
-            # QWidget rule has low specificity (0-0-1) so ID/named rules win.
             self.setStyleSheet(f"""
                 QWidget        {{ background-color: transparent; }}
                 #SearchBar     {{ background-color: rgba(46,47,58,{a}); }}
                 #EntryList     {{ background-color: rgba(30,31,38,{a}); }}
                 #TagList       {{ background-color: rgba(30,31,38,{a}); }}
+                #TagList::item:selected  {{ background-color: rgba(61,62,79,{a2}); color: #5865f2; }}
+                #EntryList::item:selected {{ background-color: rgba(61,62,79,{a2}); }}
                 #CategoryCombo {{ background-color: rgba(46,47,58,{a}); }}
                 #ToolbarButton {{ background-color: rgba(46,47,58,{a}); }}
                 #DeleteButton  {{ background-color: rgba(46,47,58,{a}); }}
@@ -497,12 +501,8 @@ class VaultPanel(QWidget):
         self._tag_list.blockSignals(False)
 
     def _on_tag_clicked(self, item: QListWidgetItem) -> None:
-        # Qt already toggled item.isSelected() before firing this signal.
-        self._selected_tags = {
-            self._tag_list.item(i).text()
-            for i in range(self._tag_list.count())
-            if self._tag_list.item(i).isSelected()
-        }
+        tag = item.text() if item.isSelected() else ""
+        self._selected_tags = {tag} if tag else set()
         self._rebuild_entries()
 
     # ------------------------------------------------------------------
@@ -568,6 +568,14 @@ class VaultPanel(QWidget):
     def _on_restore_clicked(self) -> None:
         center = self._restore_btn.mapToGlobal(self._restore_btn.rect().center())
         self.restore_requested.emit(center)
+
+    def _on_rows_moved(self) -> None:
+        """Persist entry order after drag-drop reorder."""
+        ordered_ids = [
+            self._entry_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self._entry_list.count())
+        ]
+        self._vault.reorder_entries(ordered_ids)
 
     def _on_delete_clicked(self) -> None:
         eid = self._selected_entry_id()

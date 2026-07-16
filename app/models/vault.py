@@ -1,15 +1,20 @@
-"""Vault — persists entries and secrets using Windows Credential Manager via keyring.
+"""Vault — persists entries and secrets.
 
-Layout in Credential Manager:
-  Service: "Sesame"
-  Username "vault_index"  → JSON list of Entry dicts (no secrets)
-  Username "<entry.id>"   → the raw secret string for that entry
+Layout:
+  Entry metadata (vault_index) → %APPDATA%\\Sesame\\vault_index.json   (plain JSON, no secrets)
+  Each secret                  → Windows Credential Manager, service "Sesame", username "<entry.id>"
+
+The vault_index is stored in a file rather than Credential Manager to avoid
+the 2 560-byte per-credential limit which causes silent save failures when
+the number of entries grows beyond ~10.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Optional
 
 import keyring
@@ -18,8 +23,15 @@ from app.models.entry import Entry
 
 logger = logging.getLogger(__name__)
 
-_SERVICE = "Sesame"
-_INDEX_KEY = "vault_index"
+_SERVICE   = "Sesame"
+_INDEX_KEY = "vault_index"   # legacy Credential Manager key (migration only)
+
+
+def _index_path() -> Path:
+    appdata = os.environ.get("APPDATA") or Path.home()
+    directory = Path(appdata) / "Sesame"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / "sesame_vault.json"
 
 
 class Vault:
@@ -70,6 +82,16 @@ class Vault:
                 entry.category = new_name
         self._save_index()
 
+    def reorder_entries(self, ordered_ids: list[str]) -> None:
+        """Persist a new display order for entries (drag-drop result)."""
+        id_map = {e.id: e for e in self._entries}
+        reordered = [id_map[i] for i in ordered_ids if i in id_map]
+        # Append any entries not in ordered_ids (safety net)
+        seen = set(ordered_ids)
+        reordered += [e for e in self._entries if e.id not in seen]
+        self._entries = reordered
+        self._save_index()
+
     def delete_category(self, name: str, move_to: str = "General") -> None:
         for entry in self._entries:
             if entry.category == name:
@@ -81,24 +103,54 @@ class Vault:
     # ------------------------------------------------------------------
 
     def _load_index(self) -> None:
+        path = _index_path()
+        if path.exists():
+            self._load_from_file(path)
+        else:
+            self._migrate_from_credential_manager()
+
+    def _load_from_file(self, path: Path) -> None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            before = [d.get("category", "") + str(d.get("tags", [])) for d in data]
+            self._entries = [Entry.from_dict(d) for d in data]
+            after = [e.category + str(e.tags) for e in self._entries]
+            if before != after:
+                self._save_index()   # persist any migration fixes
+        except Exception:
+            logger.exception("Failed to parse vault_index.json — starting fresh.")
+            self._entries = []
+
+    def _migrate_from_credential_manager(self) -> None:
+        """One-time migration: move vault_index from Credential Manager to file."""
         raw = keyring.get_password(_SERVICE, _INDEX_KEY)
         if not raw:
             self._entries = []
             return
         try:
             data = json.loads(raw)
-            before = [d.get("category", "") + str(d.get("tags", [])) for d in data]
             self._entries = [Entry.from_dict(d) for d in data]
-            after = [e.category + str(e.tags) for e in self._entries]
-            if before != after:
-                self._save_index()  # persist migration
+            self._save_index()   # write to file
+            # Remove the old Credential Manager entry
+            try:
+                keyring.delete_password(_SERVICE, _INDEX_KEY)
+            except Exception:
+                pass
+            logger.info("Migrated vault_index from Credential Manager to file.")
         except Exception:
-            logger.exception("Failed to parse vault index — starting fresh.")
+            logger.exception("Migration failed — starting fresh.")
             self._entries = []
 
     def _save_index(self) -> None:
-        payload = json.dumps([e.to_dict() for e in self._entries])
-        keyring.set_password(_SERVICE, _INDEX_KEY, payload)
+        path = _index_path()
+        try:
+            path.write_text(
+                json.dumps([e.to_dict() for e in self._entries],
+                           ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.exception("Failed to save vault_index.json.")
 
     def _save_secret(self, entry_id: str, secret: str) -> None:
         keyring.set_password(_SERVICE, entry_id, secret)

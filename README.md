@@ -1,4 +1,4 @@
-# Sesame  `v1.0`
+# Sesame  `v1.1`
 
 > **Se**crets **Sa**fe **Me**moriser
 
@@ -108,7 +108,7 @@ Secrets are never written to disk in plaintext.
 
 | What | Where |
 |---|---|
-| Entry metadata (name, username, url, tags, category) | Single JSON blob in Windows Credential Manager — service `Sesame`, username `vault_index` |
+| Entry metadata (name, username, url, tags, category) | `%APPDATA%\Sesame\sesame_vault.json` — plain JSON, no secrets |
 | Each secret | Individual Credential Manager entry — service `Sesame`, username `<entry-id>` |
 | UI preferences (bubble position, default category, master password hash) | `%APPDATA%\Sesame\config.json` — no secrets here |
 
