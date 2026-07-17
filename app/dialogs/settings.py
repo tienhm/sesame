@@ -351,64 +351,146 @@ class SettingsDialog(QDialog):
     def _build_data_tab(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Export
-        export_lbl = QLabel("Export vault")
-        export_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
-        layout.addWidget(export_lbl)
+        # ── Export ────────────────────────────────────────────────────
+        exp_lbl = QLabel("Export vault")
+        exp_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(exp_lbl)
 
-        export_desc = QLabel(
-            "Back up all entries and secrets to an encrypted .sesame file.\n"
-            "You will be asked to set a password for the file."
-        )
-        export_desc.setWordWrap(True)
-        layout.addWidget(export_desc)
+        exp_form = QFormLayout()
+        exp_form.setSpacing(6)
+        self._exp_pw = QLineEdit(); self._exp_pw.setEchoMode(QLineEdit.EchoMode.Password)
+        self._exp_pw.setPlaceholderText("Encryption password")
+        self._exp_pw2 = QLineEdit(); self._exp_pw2.setEchoMode(QLineEdit.EchoMode.Password)
+        self._exp_pw2.setPlaceholderText("Confirm password")
+        exp_form.addRow("Password:", self._exp_pw)
+        exp_form.addRow("Confirm:", self._exp_pw2)
+        layout.addLayout(exp_form)
 
-        export_btn = QPushButton("Export Vault…")
-        export_btn.setEnabled(self._export_fn is not None)
-        export_btn.clicked.connect(self._on_export)
-        layout.addWidget(export_btn)
+        self._exp_err = QLabel("")
+        self._exp_err.setStyleSheet("color: #e74c3c; font-size: 11px;")
+        layout.addWidget(self._exp_err)
 
-        # Separator
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
+        self._exp_btn = QPushButton("Export Vault…")
+        self._exp_btn.clicked.connect(self._on_export)
+        self._exp_pw.textChanged.connect(self._validate_export)
+        self._exp_pw2.textChanged.connect(self._validate_export)
+        self._validate_export()
+        layout.addWidget(self._exp_btn)
+
+        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         layout.addWidget(sep)
 
-        # Import
-        import_lbl = QLabel("Import vault")
-        import_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
-        layout.addWidget(import_lbl)
+        # ── Import ────────────────────────────────────────────────────
+        imp_lbl = QLabel("Import vault")
+        imp_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(imp_lbl)
 
-        import_desc = QLabel(
-            "Add entries from a .sesame backup file.\n"
-            "Existing entries are kept; duplicates are added alongside them."
-        )
-        import_desc.setWordWrap(True)
-        layout.addWidget(import_desc)
+        file_row = QHBoxLayout()
+        self._imp_path = QLineEdit(); self._imp_path.setReadOnly(True)
+        self._imp_path.setPlaceholderText("Select a .sesame file…")
+        browse_btn = QPushButton("Browse…")
+        browse_btn.setProperty("flat", True)
+        browse_btn.setMinimumWidth(80)
+        browse_btn.clicked.connect(self._browse_import_file)
+        file_row.addWidget(self._imp_path, stretch=1)
+        file_row.addWidget(browse_btn)
+        layout.addLayout(file_row)
 
-        import_btn = QPushButton("Import Vault…")
-        import_btn.setEnabled(self._import_fn is not None)
-        import_btn.clicked.connect(self._on_import)
-        layout.addWidget(import_btn)
+        imp_form = QFormLayout(); imp_form.setSpacing(6)
+        self._imp_pw = QLineEdit(); self._imp_pw.setEchoMode(QLineEdit.EchoMode.Password)
+        self._imp_pw.setPlaceholderText("File password")
+        imp_form.addRow("Password:", self._imp_pw)
+        layout.addLayout(imp_form)
+
+        self._imp_err = QLabel("")
+        self._imp_err.setStyleSheet("color: #e74c3c; font-size: 11px;")
+        layout.addWidget(self._imp_err)
+
+        self._imp_btn = QPushButton("Import Vault…")
+        self._imp_btn.setEnabled(False)
+        self._imp_path.textChanged.connect(self._validate_import)
+        self._imp_pw.textChanged.connect(self._validate_import)
+        self._imp_btn.clicked.connect(self._on_import)
+        layout.addWidget(self._imp_btn)
 
         layout.addStretch()
         return w
 
+    # ── Data tab helpers ────────────────────────────────────────────────
+
+    def _validate_export(self) -> None:
+        pw, pw2 = self._exp_pw.text(), self._exp_pw2.text()
+        if pw2 and pw != pw2:
+            self._exp_err.setText("Passwords do not match.")
+            self._exp_btn.setEnabled(False)
+        else:
+            self._exp_err.setText("")
+            self._exp_btn.setEnabled(bool(pw) and pw == pw2)
+
+    def _validate_import(self) -> None:
+        self._imp_btn.setEnabled(
+            bool(self._imp_path.text()) and bool(self._imp_pw.text())
+        )
+
+    def _browse_import_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open Backup File", "", "Sesame Vault (*.sesame)"
+        )
+        if path:
+            self._imp_path.setText(path)
+            self._imp_err.setText("")
+
     def _on_export(self) -> None:
-        if self._export_fn:
-            self.hide()
-            self._export_fn()
-            self.show()
+        from app.utils.vault_io import export_vault as _export_vault
+        password = self._exp_pw.text()
+        if not self._vault.entries:
+            self._exp_err.setText("No entries to export.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Backup", "sesame_backup.sesame", "Sesame Vault (*.sesame)"
+        )
+        if not path:
+            return
+        try:
+            data = _export_vault(self._vault.entries, self._vault.get_secret, password)
+            with open(path, "wb") as f:
+                f.write(data)
+            self._exp_pw.clear()
+            self._exp_pw2.clear()
+            self._exp_err.setStyleSheet("color: #2d6a4f; font-size: 11px;")
+            self._exp_err.setText(f"Exported {len(self._vault.entries)} entries.")
+        except Exception as e:
+            self._exp_err.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._exp_err.setText(f"Export failed: {e}")
 
     def _on_import(self) -> None:
-        if self._import_fn:
-            self.hide()
-            self._import_fn()
-            self.show()
+        from app.utils.vault_io import import_vault as _import_vault
+        from app.models.entry import Entry
+        path = self._imp_path.text()
+        password = self._imp_pw.text()
+        try:
+            file_bytes = open(path, "rb").read()
+            entries_dicts, secrets = _import_vault(file_bytes, password)
+            count = 0
+            for ed in entries_dicts:
+                entry = Entry.from_dict(ed)
+                self._vault.add_entry(entry, secrets.get(entry.id, ""))
+                count += 1
             if self._panel:
                 self._panel.refresh()
+            self._imp_pw.clear()
+            self._imp_path.clear()
+            self._imp_err.setStyleSheet("color: #2d6a4f; font-size: 11px;")
+            self._imp_err.setText(f"Imported {count} entries.")
+        except ValueError as e:
+            self._imp_err.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._imp_err.setText(str(e))
+        except Exception as e:
+            self._imp_err.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._imp_err.setText(f"Import failed: {e}")
 
     def _master_pw_status_text(self) -> str:
         return "✔  Master password is set." if self._lock_mgr.has_master_password() \
