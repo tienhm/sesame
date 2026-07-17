@@ -18,6 +18,32 @@ class TrayIcon(QSystemTrayIcon):
 
     def _build_menu(self) -> None:
         menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #25262f;
+                border: 1px solid #3a3b47;
+                border-radius: 6px;
+                padding: 4px;
+                color: #e8eaed;
+                font-size: 13px;
+            }
+            QMenu::item {
+                padding: 8px 20px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #5865f2;
+                color: #ffffff;
+            }
+            QMenu::item:disabled {
+                color: #4a4b57;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #3a3b47;
+                margin: 4px 8px;
+            }
+        """)
         menu.aboutToShow.connect(self._update_show_action)
 
         self._show_action = QAction("Show Bubble", menu)
@@ -55,5 +81,11 @@ class TrayIcon(QSystemTrayIcon):
         self._show_action.setEnabled(not panel_visible)
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            # Left single-click — show context menu at cursor position
+            menu = self.contextMenu()
+            if menu:
+                from PySide6.QtGui import QCursor
+                menu.popup(QCursor.pos())
+        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._ctrl.locate_bubble()

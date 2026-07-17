@@ -69,7 +69,13 @@ class Bubble(QWidget):
         self.setWindowOpacity(max(0.2, min(1.0, opacity)))
 
     def flash_and_center(self) -> None:
-        """Move to screen center and blink for 3 seconds."""
+        """Move to screen center and blink for 3 seconds.
+        Ensures bubble is visible and panel is hidden before flashing.
+        """
+        # Hide panel if open
+        if self._panel and self._panel.isVisible():
+            self._panel.hide()
+
         screen = QApplication.primaryScreen().availableGeometry()
         self.move(
             (screen.width() - _BUBBLE_SIZE) // 2,

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -45,6 +46,8 @@ class SettingsDialog(QDialog):
         lock_manager: LockManager,
         panel: QWidget | None = None,
         bubble: QWidget | None = None,
+        export_fn=None,
+        import_fn=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -64,6 +67,8 @@ class SettingsDialog(QDialog):
         self._lock_mgr = lock_manager
         self._panel = panel
         self._bubble = bubble
+        self._export_fn = export_fn
+        self._import_fn = import_fn
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -79,6 +84,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_general_tab(), "General")
         self._tabs.addTab(self._build_categories_tab(), "Categories")
         self._tabs.addTab(self._build_security_tab(), "Security")
+        self._tabs.addTab(self._build_data_tab(), "Data")
         layout.addWidget(self._tabs)
 
         close_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -339,6 +345,70 @@ class SettingsDialog(QDialog):
 
         self._refresh_security_list()
         return w
+
+    # ── Data tab ───────────────────────────────────────────────────────
+
+    def _build_data_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(12)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # Export
+        export_lbl = QLabel("Export vault")
+        export_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(export_lbl)
+
+        export_desc = QLabel(
+            "Back up all entries and secrets to an encrypted .sesame file.\n"
+            "You will be asked to set a password for the file."
+        )
+        export_desc.setWordWrap(True)
+        layout.addWidget(export_desc)
+
+        export_btn = QPushButton("Export Vault…")
+        export_btn.setEnabled(self._export_fn is not None)
+        export_btn.clicked.connect(self._on_export)
+        layout.addWidget(export_btn)
+
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        layout.addWidget(sep)
+
+        # Import
+        import_lbl = QLabel("Import vault")
+        import_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(import_lbl)
+
+        import_desc = QLabel(
+            "Add entries from a .sesame backup file.\n"
+            "Existing entries are kept; duplicates are added alongside them."
+        )
+        import_desc.setWordWrap(True)
+        layout.addWidget(import_desc)
+
+        import_btn = QPushButton("Import Vault…")
+        import_btn.setEnabled(self._import_fn is not None)
+        import_btn.clicked.connect(self._on_import)
+        layout.addWidget(import_btn)
+
+        layout.addStretch()
+        return w
+
+    def _on_export(self) -> None:
+        if self._export_fn:
+            self.hide()
+            self._export_fn()
+            self.show()
+
+    def _on_import(self) -> None:
+        if self._import_fn:
+            self.hide()
+            self._import_fn()
+            self.show()
+            if self._panel:
+                self._panel.refresh()
 
     def _master_pw_status_text(self) -> str:
         return "✔  Master password is set." if self._lock_mgr.has_master_password() \

@@ -156,10 +156,13 @@ class Vault:
             self._entries = [Entry.from_dict(d) for d in data]
             after = [e.category + str(e.tags) for e in self._entries]
             if before != after:
-                self._save_index()   # persist any migration fixes
+                self._save_index()
         except Exception:
-            logger.exception("Failed to parse vault_index.json — starting fresh.")
+            logger.exception("Failed to parse sesame_vault.json — starting fresh.")
             self._entries = []
+            return
+        # One-time migration: re-assign numeric IDs to UUID-style entries
+        self._migrate_ids_to_numeric()
 
     def _migrate_from_credential_manager(self) -> None:
         """One-time migration: move vault_index from Credential Manager to file."""
@@ -180,6 +183,46 @@ class Vault:
         except Exception:
             logger.exception("Migration failed — starting fresh.")
             self._entries = []
+
+    def _migrate_ids_to_numeric(self) -> None:
+        """Re-assign short numeric IDs to entries that still have UUID-style IDs."""
+        if all(e.id.isdigit() for e in self._entries):
+            return  # nothing to do
+
+        # Build the set of numeric IDs already in use
+        used_nums: set[int] = {int(e.id) for e in self._entries if e.id.isdigit()}
+        counter = 0
+
+        def _next_num() -> str:
+            nonlocal counter
+            while counter in used_nums:
+                counter += 1
+            n = counter
+            used_nums.add(n)
+            counter += 1
+            return str(n)
+
+        changed = False
+        for entry in self._entries:
+            if not entry.id.isdigit():
+                old_id = entry.id
+                new_id = _next_num()
+                # Migrate secret to new ID
+                secret = self.get_secret(old_id)
+                if secret:
+                    credential_store.set_secret(new_id, secret)
+                    credential_store.delete_secret(old_id)
+                    try:
+                        keyring.delete_password(_SERVICE, old_id)
+                    except Exception:
+                        pass
+                entry.id = new_id
+                changed = True
+
+        if changed:
+            self._save_index()
+            logger.info("Migrated %d UUID entry IDs to numeric IDs.",
+                        sum(1 for e in self._entries))
 
     def _save_index(self) -> None:
         path = _index_path()

@@ -160,7 +160,10 @@ class SesameApp:
 
     def open_settings(self) -> None:
         dlg = SettingsDialog(self._vault, self._config, self._lock_mgr,
-                             panel=self._panel, bubble=self._bubble, parent=None)
+                             panel=self._panel, bubble=self._bubble,
+                             export_fn=self.export_vault,
+                             import_fn=self.import_vault,
+                             parent=None)
         dlg.exec()
         self._panel.refresh()
         self._panel.apply_appearance(self._config)

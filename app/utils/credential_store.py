@@ -38,7 +38,7 @@ def set_secret(entry_id: str, secret: str) -> None:
         "Type": win32cred.CRED_TYPE_GENERIC,
         "TargetName": _target_name(entry_id),
         "UserName": "",
-        "CredentialBlob": secret.encode("utf-16-le"),
+        "CredentialBlob": secret,
         "Comment": "Sesame secret",
         "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
     }
@@ -56,7 +56,8 @@ def get_secret(entry_id: str) -> str:
         cred = win32cred.CredRead(_target_name(entry_id), win32cred.CRED_TYPE_GENERIC, 0)
     except pywintypes.error:
         return ""
-    return cred["CredentialBlob"].decode("utf-16-le")
+    blob = cred["CredentialBlob"]
+    return blob.decode("utf-16-le") if isinstance(blob, (bytes, bytearray)) else str(blob)
 
 
 def delete_secret(entry_id: str) -> None:
