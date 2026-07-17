@@ -12,6 +12,7 @@ class Entry:
     category: str
     tags: list[str] = field(default_factory=list)
     url: str = ""
+    auto_login_ms: int = 0  # 0/absent = disabled; else ms to wait after opening url before sending keys
     id: str = ""  # assigned by Vault.add_entry — short, reused-gap int as str
 
     # ------------------------------------------------------------------
@@ -26,6 +27,7 @@ class Entry:
             "category": self.category,
             "tags": self.tags,
             "url": self.url,
+            "auto_login_ms": self.auto_login_ms,
         }
 
     @classmethod
@@ -40,6 +42,11 @@ class Entry:
             tags = Entry.parse_tags(category)
             category = "General"
 
+        try:
+            auto_login_ms = max(0, int(data.get("auto_login_ms") or 0))
+        except (TypeError, ValueError):
+            auto_login_ms = 0
+
         return cls(
             id=data["id"],
             name=data["name"],
@@ -47,6 +54,7 @@ class Entry:
             category=category,
             tags=tags,
             url=data.get("url", ""),
+            auto_login_ms=auto_login_ms,
         )
 
     @staticmethod

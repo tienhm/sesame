@@ -6,6 +6,7 @@ import secrets
 import string
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIntValidator
 from app.utils.icons import FA
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -113,6 +114,12 @@ class AddEditEntryDialog(QDialog):
         self._url_edit.setPlaceholderText("e.g. https://github.com")
         form.addRow("URL", self._url_edit)
 
+        # Auto-login delay
+        self._auto_login_edit = QLineEdit()
+        self._auto_login_edit.setPlaceholderText("0 = off — else ms to wait before typing")
+        self._auto_login_edit.setValidator(QIntValidator(0, 60_000, self))
+        form.addRow("Auto-login", self._auto_login_edit)
+
         # Tags
         self._tags_edit = QLineEdit()
         self._tags_edit.setPlaceholderText("e.g. work, 2fa, vpn")
@@ -158,6 +165,8 @@ class AddEditEntryDialog(QDialog):
         self._name_edit.setText(entry.name)
         self._user_edit.setText(entry.username)
         self._url_edit.setText(entry.url)
+        if entry.auto_login_ms:
+            self._auto_login_edit.setText(str(entry.auto_login_ms))
         self._tags_edit.setText(", ".join(entry.tags))
         # Load existing secret so show/hide works immediately
         existing_secret = self._vault.get_secret(entry.id)
@@ -206,6 +215,7 @@ class AddEditEntryDialog(QDialog):
         url      = self._url_edit.text().strip()
         category = self._cat_combo.currentText().strip() or "General"
         tags     = Entry.parse_tags(self._tags_edit.text())
+        auto_login_ms = int(self._auto_login_edit.text() or 0)
 
         if not name:
             self._error_lbl.setText("Name is required.")
@@ -220,6 +230,7 @@ class AddEditEntryDialog(QDialog):
         self._result_url      = url
         self._result_category = category
         self._result_tags     = tags
+        self._result_auto_login_ms = auto_login_ms
         self.accept()
 
     # ------------------------------------------------------------------
@@ -233,6 +244,7 @@ class AddEditEntryDialog(QDialog):
             category=self._result_category,
             tags=self._result_tags,
             url=self._result_url,
+            auto_login_ms=self._result_auto_login_ms,
         )
         if self._is_edit:
             kwargs["id"] = self._existing_entry.id

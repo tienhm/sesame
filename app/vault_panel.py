@@ -43,6 +43,7 @@ from app.config import AppConfig
 from app.dialogs.settings import UnlockDialog
 from app.models.entry import Entry
 from app.models.vault import Vault
+from app.utils import auto_login
 from app.utils.clipboard import ClipboardManager
 from app.utils.lock_manager import LockManager
 
@@ -63,6 +64,7 @@ class EntryRowWidget(QWidget):
     copy_user_requested = Signal(str)    # entry_id
     edit_row_requested  = Signal(str)    # entry_id
     copy_secret_requested = Signal(str)  # entry_id
+    url_open_requested  = Signal(str)    # entry_id
 
     def __init__(self, entry: Entry, countdown: int | None = None, parent=None) -> None:
         super().__init__(parent)
@@ -87,10 +89,11 @@ class EntryRowWidget(QWidget):
         if entry.url:
             url_lbl = QLabel(f'<a href="{entry.url}" style="color:#5865f2;text-decoration:none;">{entry.url}</a>')
             url_lbl.setObjectName("EntryUrl")
-            url_lbl.setOpenExternalLinks(True)
+            url_lbl.setOpenExternalLinks(False)  # we open it ourselves, to chain auto-login after
             url_lbl.setTextInteractionFlags(
                 Qt.TextInteractionFlag.TextBrowserInteraction
             )
+            url_lbl.linkActivated.connect(lambda _url: self.url_open_requested.emit(self.entry_id))
             text_block.addWidget(url_lbl)
 
         layout.addLayout(text_block, stretch=1)
@@ -544,6 +547,7 @@ class VaultPanel(QWidget):
             row_widget.copy_user_requested.connect(self._on_copy_user_requested)
             row_widget.edit_row_requested.connect(self.edit_requested)
             row_widget.copy_secret_requested.connect(self._on_copy_requested)
+            row_widget.url_open_requested.connect(self._on_url_open_requested)
             self._row_widgets[entry.id] = row_widget
 
             item = QListWidgetItem(self._entry_list)
@@ -603,6 +607,23 @@ class VaultPanel(QWidget):
             return
         secret = self._vault.get_secret(entry_id) or ""
         self._clipboard.copy(entry_id, secret)
+
+    def _on_url_open_requested(self, entry_id: str) -> None:
+        entry = next((e for e in self._vault.entries if e.id == entry_id), None)
+        if not entry or not entry.url:
+            return
+        QDesktopServices.openUrl(QUrl(entry.url))
+        if entry.auto_login_ms > 0:
+            QTimer.singleShot(entry.auto_login_ms, lambda: self._do_auto_login(entry_id))
+
+    def _do_auto_login(self, entry_id: str) -> None:
+        entry = next((e for e in self._vault.entries if e.id == entry_id), None)
+        if not entry:
+            return
+        if not self._ensure_unlocked(entry):
+            return
+        secret = self._vault.get_secret(entry_id) or ""
+        auto_login.send_credentials(entry.username, secret)
 
     def _ensure_unlocked(self, entry: Entry) -> bool:
         if not self._lock_mgr.is_locked(entry.category):
