@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
 
 
@@ -13,7 +12,7 @@ class Entry:
     category: str
     tags: list[str] = field(default_factory=list)
     url: str = ""
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = ""  # assigned by Vault.add_entry — short, reused-gap int as str
 
     # ------------------------------------------------------------------
     # Serialisation helpers (secret is NOT stored here — lives in keyring)

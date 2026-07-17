@@ -2,11 +2,19 @@
 
 Layout:
   Entry metadata (vault_index) → %APPDATA%\\Sesame\\vault_index.json   (plain JSON, no secrets)
-  Each secret                  → Windows Credential Manager, service "Sesame", username "<entry.id>"
+  Each secret                  → Windows Credential Manager, TargetName "SZM:<entry.id>",
+                                  UserName "" (see app.utils.credential_store)
+
+entry.id is a short, reused-gap integer (as str) assigned by Vault — not a
+global uuid — to keep the Credential Manager TargetName compact.
 
 The vault_index is stored in a file rather than Credential Manager to avoid
 the 2 560-byte per-credential limit which causes silent save failures when
 the number of entries grows beyond ~10.
+
+Secrets written before this scheme (via `keyring`, service "Sesame",
+username "<entry.id>") are picked up lazily by `get_secret` and migrated to
+the new store on first read.
 """
 
 from __future__ import annotations
@@ -20,10 +28,11 @@ from typing import Optional
 import keyring
 
 from app.models.entry import Entry
+from app.utils import credential_store
 
 logger = logging.getLogger(__name__)
 
-_SERVICE   = "Sesame"
+_SERVICE   = "Sesame"        # legacy keyring service name (secret migration + index migration only)
 _INDEX_KEY = "vault_index"   # legacy Credential Manager key (migration only)
 
 
@@ -52,6 +61,7 @@ class Vault:
         return cats if cats else ["General"]
 
     def add_entry(self, entry: Entry, secret: str) -> None:
+        entry.id = self._next_id()  # always assign — ignore any id the caller set (e.g. import)
         self._entries.append(entry)
         self._save_index()
         self._save_secret(entry.id, secret)
@@ -68,13 +78,43 @@ class Vault:
     def delete_entry(self, entry_id: str) -> None:
         self._entries = [e for e in self._entries if e.id != entry_id]
         self._save_index()
+        credential_store.delete_secret(entry_id)
         try:
-            keyring.delete_password(_SERVICE, entry_id)
+            keyring.delete_password(_SERVICE, entry_id)  # legacy location, if never migrated
         except keyring.errors.PasswordDeleteError:
             pass
 
     def get_secret(self, entry_id: str) -> str:
-        return keyring.get_password(_SERVICE, entry_id) or ""
+        secret = credential_store.get_secret(entry_id)
+        if secret:
+            return secret
+
+        # Fall back to the legacy keyring-based location and migrate on read.
+        legacy = keyring.get_password(_SERVICE, entry_id) or ""
+        if legacy:
+            credential_store.set_secret(entry_id, legacy)
+            try:
+                keyring.delete_password(_SERVICE, entry_id)
+            except keyring.errors.PasswordDeleteError:
+                pass
+        return legacy
+
+    def _next_id(self) -> str:
+        """Smallest non-negative int (as str) not already used as an entry id.
+
+        Reuses gaps left by deletions instead of growing forever. Non-numeric
+        legacy ids (old uuids, pre-dating this scheme) are simply ignored.
+        """
+        used = set()
+        for e in self._entries:
+            try:
+                used.add(int(e.id))
+            except (TypeError, ValueError):
+                pass
+        i = 0
+        while i in used:
+            i += 1
+        return str(i)
 
     def rename_category(self, old_name: str, new_name: str) -> None:
         for entry in self._entries:
@@ -153,4 +193,4 @@ class Vault:
             logger.exception("Failed to save vault_index.json.")
 
     def _save_secret(self, entry_id: str, secret: str) -> None:
-        keyring.set_password(_SERVICE, entry_id, secret)
+        credential_store.set_secret(entry_id, secret)

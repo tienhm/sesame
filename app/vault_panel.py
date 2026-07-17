@@ -227,7 +227,7 @@ class VaultPanel(QWidget):
 
         try:
             from main import __version__ as _ver
-            _caption = f"Sesame  {_ver}"
+            _caption = f"Sesame v{_ver}"
         except Exception:
             _caption = "Sesame"
         title_lbl = QLabel(_caption)

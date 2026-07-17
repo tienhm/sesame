@@ -50,7 +50,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         try:
             from main import __version__ as _ver
-            _title = f"Settings — Sesame {_ver}"
+            _title = f"Settings — Sesame v{_ver}"
         except Exception:
             _title = "Settings"
         self.setWindowTitle(_title)

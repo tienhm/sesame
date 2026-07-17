@@ -22,6 +22,9 @@ a = Analysis(
         "cryptography.hazmat.primitives.ciphers.aead",
         "cryptography.hazmat.backends.openssl",
         "PySide6.QtNetwork",
+        "win32timezone",  # pywin32 freeze gotcha, needed even though not imported directly
+        "win32cred",
+        "pywintypes",
     ],
     hookspath=[],
     hooksconfig={},

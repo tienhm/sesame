@@ -56,4 +56,4 @@ class TrayIcon(QSystemTrayIcon):
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self._ctrl.toggle_bubble()
+            self._ctrl.locate_bubble()

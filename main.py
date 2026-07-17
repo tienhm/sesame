@@ -5,7 +5,7 @@ Wires together: Vault, ClipboardManager, Bubble, VaultPanel, TrayIcon.
 
 from __future__ import annotations
 
-__version__ = "1.1"
+__version__ = "1.2"
 
 import ctypes
 import logging
@@ -88,7 +88,7 @@ class SesameApp:
         self._bubble.set_panel(self._panel)
 
         self._tray = TrayIcon(self._icon, self)
-        self._tray.setToolTip(f"Sesame {__version__}")
+        self._tray.setToolTip(f"Sesame v{__version__}")
         self._tray.show()
 
         # Connect panel signals
@@ -316,7 +316,7 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setApplicationName("Sesame")
-    app.setApplicationDisplayName(f"Sesame {__version__}")
+    app.setApplicationDisplayName(f"Sesame v{__version__}")
     app.setApplicationVersion(__version__)
     app.setQuitOnLastWindowClosed(False)  # keep alive when panel/bubble closed
 

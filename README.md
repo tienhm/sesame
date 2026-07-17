@@ -109,8 +109,10 @@ Secrets are never written to disk in plaintext.
 | What | Where |
 |---|---|
 | Entry metadata (name, username, url, tags, category) | `%APPDATA%\Sesame\sesame_vault.json` — plain JSON, no secrets |
-| Each secret | Individual Credential Manager entry — service `Sesame`, username `<entry-id>` |
+| Each secret | Individual Credential Manager entry — `TargetName` = `SZM:<entry-id>`, `UserName` = "" |
 | UI preferences (bubble position, default category, master password hash) | `%APPDATA%\Sesame\config.json` — no secrets here |
+
+`entry-id` is a short, reused-gap integer assigned locally by the vault (not a global UUID), keeping each Credential Manager entry compact. `UserName` is left empty — the actual account username is stored in `sesame_vault.json`, not duplicated into Credential Manager. Secrets from older versions are migrated to this layout automatically the first time they're read.
 
 Windows DPAPI encrypts all Credential Manager entries automatically. The data is tied to the current Windows user account and machine.
 
@@ -238,7 +240,8 @@ Right-click the tray icon for quick access to:
 | Package | Purpose |
 |---|---|
 | `PySide6` | Qt6 UI framework (LGPL) |
-| `keyring` | Cross-platform Credential Manager abstraction |
+| `keyring` | Vault-index migration only (secrets use `pywin32` directly, see Storage) |
+| `pywin32` | Direct Windows Credential Manager access for secrets (Windows only) |
 | `cryptography` | AES-256-GCM encryption for vault export; PBKDF2 for master password |
 | `pillow` | PNG → ICO conversion for PyInstaller (build only) |
 | `pyinstaller` | Package to standalone `.exe` (build only) |

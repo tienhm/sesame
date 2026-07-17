@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2 — 2026-07-17
+
+### Changed
+- **Secret storage optimized** — secrets now written directly via `pywin32` (`win32cred`) instead of through `keyring`, with an explicit compact layout: `TargetName` = `SZM:<entry-id>`, `UserName` = "" (the account username lives only in `sesame_vault.json`, no longer duplicated into Credential Manager).
+- Entry ids are now short integers assigned locally by the vault (reusing gaps left by deletions) instead of global UUIDs, shrinking each Credential Manager entry.
+- Secrets written by older versions are migrated to the new layout automatically the first time they're read; nothing to do manually.
+- Double-clicking the system tray icon now calls *Locate Sesame* (flashes the bubble at screen centre) instead of toggling the bubble.
+
 ## v1.1 — 2026-07-17
 
 ### Fixed
