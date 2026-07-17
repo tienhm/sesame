@@ -2,50 +2,41 @@
 
 ## v1.2 — 2026-07-17
 
+### Added
+- **Auto-login** — set a delay (ms) per entry; after clicking the URL Sesame waits then injects `username → TAB → password` as keystrokes (Windows only, no trailing Enter so you verify focus first)
+- **Export / Import inline in Settings → Data tab** — password fields and file picker directly on the form, no separate popup window
+- **Export / Import in Settings** now accessible from the tray icon and the vault panel sponsor button
+
 ### Changed
-- **Secret storage optimized** — secrets now written directly via `pywin32` (`win32cred`) instead of through `keyring`, with an explicit compact layout: `TargetName` = `SZM:<entry-id>`, `UserName` = "" (the account username lives only in `sesame_vault.json`, no longer duplicated into Credential Manager).
-- Entry ids are now short integers assigned locally by the vault (reusing gaps left by deletions) instead of global UUIDs, shrinking each Credential Manager entry.
-- Secrets written by older versions are migrated to the new layout automatically the first time they're read; nothing to do manually.
-- Double-clicking the system tray icon now calls *Locate Sesame* (flashes the bubble at screen centre) instead of toggling the bubble.
+- **Secrets stored via `win32cred` (pywin32)** — compact target name `SZM:<id>`, eliminates silent save failures on machines with the 2 560-byte Credential Manager limit
+- **Entry IDs are now short integers** (0, 1, 2…) instead of UUIDs; existing entries migrate automatically on first launch
+- **Tag filter is single-select** — click a tag to filter, click again to deselect and show all entries in the category
+- **Tray icon left-click** opens the context menu (right-click still works)
+- **Tray context menu** styled to match the dark app theme
+- **Double-click tray** → Locate Sesame (flash bubble at screen centre)
+- `flash_and_center` now hides the panel if open before flashing the bubble
+- Selected tag/entry row is 30% more opaque than the component opacity setting
+
+### Fixed
+- `pywin32` missing from venv → `set_secret` crashed silently and secrets were not saved
+- `CredentialBlob` type mismatch with pywin32 312 (bytes vs string)
+- Export/Import dialog appeared behind Settings due to `WindowStaysOnTopHint` — redesigned as inline form
+- UUID entry IDs automatically re-assigned to compact numeric IDs on first launch
+
+---
 
 ## v1.1 — 2026-07-17
 
 ### Fixed
-- **Vault index moved from Windows Credential Manager to file** (`%APPDATA%\Sesame\sesame_vault.json`) — resolves silent save failures on corporate machines where Credential Manager enforces a 2 560-byte per-credential limit. Existing data is migrated automatically on first launch; no manual action required.
-- Security review fixes:
-  - `remove_lock` typo → `remove_locked_category` (crash on category delete)
-  - `itemChanged` signal accumulated duplicate connections on each Security tab refresh (corrupted lock state)
-  - Sponsor button in toolbar was never connected to a slot
-  - PBKDF2 iterations for master password raised from 100 000 to 600 000 (matches export/import)
-  - Clipboard `clear()` now uses the Win32 path so the empty write also carries `ExcludeClipboardContentFromMonitorProcessing`
-  - Unclosed file handle in vault import path
-  - `config.get("key") or default` falsy-zero bug (offset = 0 was treated as 0.5)
-  - `random.choice` → `secrets.choice` for password generator (cryptographically secure)
-  - `countdown = active_entry_id and None` always evaluated to `None` — countdown badge now shown correctly on list rebuild
+- **Vault index moved to file** (`%APPDATA%\Sesame\sesame_vault.json`) — resolves silent save failures on corporate machines (2 560-byte Credential Manager limit). Migrates automatically.
+- Security review fixes: `remove_lock` typo, duplicate `itemChanged` signal connections, disconnected sponsor button, PBKDF2 iterations raised to 600 000, clipboard `clear()` via Win32 path, unclosed file handle, falsy-zero `or` bug, `random.choice` → `secrets.choice`, countdown badge on list rebuild
 
 ### Changed
-- Tag list is now **single-select** — click a tag to filter, click again to deselect
-- Selected tag / entry background is **30% more opaque** than the component opacity setting for clear visual feedback
-
-### Added
-- **Drag-to-reorder entries** — drag an entry row up or down; new order is saved immediately
-- Viewport preview in Settings now correctly maps to the panel's actual render region (scale-aware coordinate conversion)
-- Bubble countdown mirror when panel is closed (already in v1.0 but now also applies immediately on restore)
+- Tag list single-select; selected background 30% more opaque
+- Drag-to-reorder entries; scale-aware viewport preview in Settings
 
 ---
 
 ## v1.0 — 2026-07-12
 
-Initial release.
-
-- Floating always-on-top bubble with drag positioning
-- Vault panel: search, category filter, tag filter, entry list
-- Entry fields: name, username, URL, secret, tags, category
-- Inline copy (👤 username, 🔑 password with 30 s auto-clear), edit (✏), password generator (🎲)
-- Clipboard excluded from Windows Clipboard History (Win+V)
-- Master password protection per category (PBKDF2-HMAC-SHA256, 600 000 iterations)
-- Export / Import vault (AES-256-GCM, PBKDF2-HMAC-SHA256, 600 000 iterations, random salt)
-- Background image support with drag-to-position viewport and component opacity slider
-- Single instance enforcement with bubble flash-and-center
-- Font Awesome 6 icons
-- Start with Windows (no admin rights required)
+Initial release — floating bubble, vault panel, entry fields, clipboard auto-clear (Win+V excluded), master password, export/import (AES-256-GCM), background image, single instance, Font Awesome 6 icons.

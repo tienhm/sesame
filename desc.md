@@ -1,54 +1,65 @@
-## Sesame v1.0
+## Sesame v1.2
 
-> Open **Se**crets **Sa**fe **Me**moriser
+> **Se**crets **Sa**fe **Me**moriser
 
-A lightweight Windows desktop password manager. Stores secrets in Windows Credential Manager (DPAPI-encrypted). No installation required, no admin rights needed.
+A lightweight Windows 64-bit desktop password manager. Stores secrets in Windows Credential Manager (DPAPI-encrypted). No installation required, no admin rights needed.
+
+---
+
+### What's new in v1.2
+
+**Auto-login**
+Set a delay (milliseconds) per entry. After clicking the URL, Sesame waits then injects `username → TAB → password` as keystrokes into the focused window. No trailing Enter — you verify focus before submitting. Windows only.
+
+**Export / Import inline in Settings**
+Password fields and file picker are now on the Settings → Data tab directly. No separate popup window.
+
+**Compact credential storage**
+Secrets are now stored via `win32cred` (pywin32) with short numeric IDs (`SZM:0`, `SZM:1`…) instead of UUIDs. Eliminates the silent save failures on corporate machines caused by the 2 560-byte Windows Credential Manager limit. Existing entries migrate automatically on first launch.
+
+**Tag filter: single-select**
+Click a tag to filter entries, click again to deselect.
+
+**Tray menu improvements**
+Left-click now opens the context menu. Dark theme matches the app.
 
 ---
 
 ### Features
 
 **Core**
-- Floating always-on-top bubble — drag to any position, persists between sessions
-- Vault panel with title bar — drag to reposition, ⊙ restores to bubble, ✕ closes to tray
-- Bubble and panel are linked: click bubble to open panel, click ⊙ to return
+- Floating always-on-top bubble — drag to any position
+- Vault panel — search, category filter, tag filter, drag-to-reorder entries
+- Click ⊙ to restore bubble; click ✕ to close panel
 
 **Entries**
-- Fields: Name, Username, URL (clickable link), Secret, Tags, Category
-- Inline copy buttons per row: 👤 username, 🔑 password (30-second auto-clear countdown)
-- Inline edit button ✏ — pre-loads existing secret
-- Password generator 🎲 with configurable length (4–64), character sets (letters / digits / special); remembers settings between opens; uses `secrets.choice` (cryptographically secure)
-- Clipboard excluded from **Windows Clipboard History** (Win+V) via `ExcludeClipboardContentFromMonitorProcessing`
-- Active countdown mirrors on the bubble when panel is closed
-
-**Filtering**
-- Category combo + tag list (AND logic multi-select)
-- Real-time search across name, username, tags
+- Fields: Name, Username, URL (clickable), Secret, Tags, Category
+- Inline 👤 copy username / 🔑 copy password (30 s auto-clear, excluded from Win+V)
+- Inline ✏ edit (pre-loads existing secret)
+- 🎲 Password generator — length, letters/digits/special; remembers settings
 
 **Security**
-- Master password (PBKDF2-HMAC-SHA256, 600 000 iterations) protects selected categories; unlocked once per session
-
-**Export / Import**
-- AES-256-GCM encrypted `.sesame` files — PBKDF2-derived key, 600 000 iterations, random salt
+- Secrets in Windows Credential Manager (DPAPI-encrypted, per user)
+- Master password (PBKDF2-HMAC-SHA256, 600 000 iterations) per category; unlocked once per session
+- Clipboard excluded from Windows Clipboard History (Win+V)
 
 **Settings**
-- General: Start with Windows, default category, bubble opacity, background image with drag-to-position viewport, component opacity slider
+- General: bubble opacity, default category, background image, component opacity
 - Categories: rename, delete
-- Security: set / change / remove master password; per-category lock toggle
+- Security: master password management
+- Data: export / import vault inline
 
 **System tray**
-- Show / Hide Bubble (context-aware, disabled while panel is open)
-- Locate Sesame — flashes bubble at screen centre
+- Show / Hide Bubble (context-aware)
+- Locate Sesame — flash bubble at screen centre
 - ❤ Support Sesame
 - Exit
-
-**Other**
-- Single-instance: second launch signals the first to flash the bubble
-- Font Awesome 6 icons
-- No network access; all data stays local
 
 ---
 
 ### Download
 
-`Sesame.exe` — standalone executable, no Python required, no installation needed.
+**Download zip (recommended):** `sesame-binary-w64.zip` — Password: `sesame`
+**Download exe directly:** `Sesame.exe`
+
+> ⚠️ Some antivirus engines may flag this exe — this is a **false positive** common with PyInstaller-packaged Python apps. The source code is fully open on this repository. If in doubt, build from source.
