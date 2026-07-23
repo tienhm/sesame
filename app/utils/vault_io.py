@@ -58,10 +58,10 @@ def export_vault(entries, get_secret_fn, password: str,
     return json.dumps(file_data, indent=2).encode("utf-8")
 
 
-def import_vault(file_bytes: bytes, password: str) -> tuple[list[dict], dict[str, str]]:
+def import_vault(file_bytes: bytes, password: str) -> tuple[list[dict], dict[str, str], dict[str, str]]:
     """Decrypt .sesame file bytes.
 
-    Returns (entries_dicts, secrets_dict).
+    Returns (entries_dicts, secrets_dict, otp_secrets_dict).
     Raises ValueError on wrong password or corrupted file.
     """
     try:

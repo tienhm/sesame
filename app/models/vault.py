@@ -1,20 +1,12 @@
 """Vault — persists entries and secrets.
 
 Layout:
-  Entry metadata (vault_index) → %APPDATA%\\Sesame\\vault_index.json   (plain JSON, no secrets)
-  Each secret                  → Windows Credential Manager, TargetName "SZM:<entry.id>",
-                                  UserName "" (see app.utils.credential_store)
+  Entry metadata  → %APPDATA%\\Sesame\\sesame_vault.json  (plain JSON, no secrets)
+  Secrets + OTP   → Windows Credential Manager, TargetName "SZM:<entry.id>",
+                     CredentialBlob = {"p": "<password>", "o": "<otp_secret>"}
+                     (see app.utils.credential_store)
 
-entry.id is a short, reused-gap integer (as str) assigned by Vault — not a
-global uuid — to keep the Credential Manager TargetName compact.
-
-The vault_index is stored in a file rather than Credential Manager to avoid
-the 2 560-byte per-credential limit which causes silent save failures when
-the number of entries grows beyond ~10.
-
-Secrets written before this scheme (via `keyring`, service "Sesame",
-username "<entry.id>") are picked up lazily by `get_secret` and migrated to
-the new store on first read.
+entry.id is a short, reused-gap integer (as str) assigned by Vault.
 """
 
 from __future__ import annotations
@@ -25,15 +17,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import keyring
-
 from app.models.entry import Entry
 from app.utils import credential_store
 
 logger = logging.getLogger(__name__)
-
-_SERVICE   = "Sesame"        # legacy keyring service name (secret migration + index migration only)
-_INDEX_KEY = "vault_index"   # legacy Credential Manager key (migration only)
 
 
 def _index_path() -> Path:
@@ -61,7 +48,7 @@ class Vault:
         return cats if cats else ["General"]
 
     def add_entry(self, entry: Entry, secret: str) -> None:
-        entry.id = self._next_id()  # always assign — ignore any id the caller set (e.g. import)
+        entry.id = self._next_id()
         self._entries.append(entry)
         self._save_index()
         self._save_secret(entry.id, secret)
@@ -79,45 +66,22 @@ class Vault:
         self._entries = [e for e in self._entries if e.id != entry_id]
         self._save_index()
         credential_store.delete_secret(entry_id)
-        credential_store.delete_otp_secret(entry_id)
-        try:
-            keyring.delete_password(_SERVICE, entry_id)  # legacy location, if never migrated
-        except keyring.errors.PasswordDeleteError:
-            pass
+
+    def get_secret(self, entry_id: str) -> str:
+        return credential_store.get_secret(entry_id)
 
     def get_otp_secret(self, entry_id: str) -> str:
         return credential_store.get_otp_secret(entry_id)
 
     def set_otp_secret(self, entry_id: str, secret: str) -> None:
         credential_store.set_otp_secret(entry_id, secret)
-        # Mark entry as having OTP and persist
         for e in self._entries:
             if e.id == entry_id:
                 e.has_otp = bool(secret)
                 break
         self._save_index()
 
-    def get_secret(self, entry_id: str) -> str:
-        secret = credential_store.get_secret(entry_id)
-        if secret:
-            return secret
-
-        # Fall back to the legacy keyring-based location and migrate on read.
-        legacy = keyring.get_password(_SERVICE, entry_id) or ""
-        if legacy:
-            credential_store.set_secret(entry_id, legacy)
-            try:
-                keyring.delete_password(_SERVICE, entry_id)
-            except keyring.errors.PasswordDeleteError:
-                pass
-        return legacy
-
     def _next_id(self) -> str:
-        """Smallest non-negative int (as str) not already used as an entry id.
-
-        Reuses gaps left by deletions instead of growing forever. Non-numeric
-        legacy ids (old uuids, pre-dating this scheme) are simply ignored.
-        """
         used = set()
         for e in self._entries:
             try:
@@ -136,10 +100,8 @@ class Vault:
         self._save_index()
 
     def reorder_entries(self, ordered_ids: list[str]) -> None:
-        """Persist a new display order for entries (drag-drop result)."""
         id_map = {e.id: e for e in self._entries}
         reordered = [id_map[i] for i in ordered_ids if i in id_map]
-        # Append any entries not in ordered_ids (safety net)
         seen = set(ordered_ids)
         reordered += [e for e in self._entries if e.id not in seen]
         self._entries = reordered
@@ -160,47 +122,35 @@ class Vault:
         if path.exists():
             self._load_from_file(path)
         else:
-            self._migrate_from_credential_manager()
+            self._entries = []
 
     def _load_from_file(self, path: Path) -> None:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            before = [d.get("category", "") + str(d.get("tags", [])) for d in data]
-            self._entries = [Entry.from_dict(d) for d in data]
-            after = [e.category + str(e.tags) for e in self._entries]
-            if before != after:
-                self._save_index()
         except Exception:
-            logger.exception("Failed to parse sesame_vault.json — starting fresh.")
+            logger.exception("Failed to read sesame_vault.json — starting fresh.")
             self._entries = []
             return
-        # One-time migration: re-assign numeric IDs to UUID-style entries
-        self._migrate_ids_to_numeric()
-        # One-time migration: move otp_secret from JSON to Credential Manager
+        # Parse entries individually so one bad record doesn't wipe the vault
+        entries, changed = [], False
+        for d in data:
+            try:
+                before_cat  = d.get("category", "") + str(d.get("tags", []))
+                entry = Entry.from_dict(d)
+                if entry.category + str(entry.tags) != before_cat:
+                    changed = True
+                entries.append(entry)
+            except Exception:
+                logger.warning("Skipping malformed entry id=%s: %s",
+                               d.get("id", "?"), d.get("name", "?"))
+        self._entries = entries
+        if changed:
+            self._save_index()
+        # v1.2→v1.3: move otp_secret from JSON field to Credential Manager
         self._migrate_otp_secrets_to_cred_manager()
 
-    def _migrate_from_credential_manager(self) -> None:
-        """One-time migration: move vault_index from Credential Manager to file."""
-        raw = keyring.get_password(_SERVICE, _INDEX_KEY)
-        if not raw:
-            self._entries = []
-            return
-        try:
-            data = json.loads(raw)
-            self._entries = [Entry.from_dict(d) for d in data]
-            self._save_index()   # write to file
-            # Remove the old Credential Manager entry
-            try:
-                keyring.delete_password(_SERVICE, _INDEX_KEY)
-            except Exception:
-                pass
-            logger.info("Migrated vault_index from Credential Manager to file.")
-        except Exception:
-            logger.exception("Migration failed — starting fresh.")
-            self._entries = []
-
     def _migrate_otp_secrets_to_cred_manager(self) -> None:
-        """Move otp_secret values stored in JSON → Credential Manager."""
+        """One-time: move otp_secret values stored in JSON → Credential Manager blob."""
         path = _index_path()
         try:
             raw_data = json.loads(path.read_text(encoding="utf-8"))
@@ -208,54 +158,17 @@ class Vault:
             return
         changed = False
         for d, entry in zip(raw_data, self._entries):
-            secret_in_json = d.get("otp_secret", "")
-            if secret_in_json:
-                credential_store.set_otp_secret(entry.id, secret_in_json)
+            otp_in_json = d.get("otp_secret", "")
+            if otp_in_json:
+                credential_store.set_otp_secret(entry.id, otp_in_json)
                 entry.has_otp = True
                 changed = True
         if changed:
             self._save_index()
             logger.info("Migrated OTP secrets from JSON to Credential Manager.")
 
-    def _migrate_ids_to_numeric(self) -> None:
-        """Re-assign short numeric IDs to entries that still have UUID-style IDs."""
-        if all(e.id.isdigit() for e in self._entries):
-            return  # nothing to do
-
-        # Build the set of numeric IDs already in use
-        used_nums: set[int] = {int(e.id) for e in self._entries if e.id.isdigit()}
-        counter = 0
-
-        def _next_num() -> str:
-            nonlocal counter
-            while counter in used_nums:
-                counter += 1
-            n = counter
-            used_nums.add(n)
-            counter += 1
-            return str(n)
-
-        changed = False
-        for entry in self._entries:
-            if not entry.id.isdigit():
-                old_id = entry.id
-                new_id = _next_num()
-                # Migrate secret to new ID
-                secret = self.get_secret(old_id)
-                if secret:
-                    credential_store.set_secret(new_id, secret)
-                    credential_store.delete_secret(old_id)
-                    try:
-                        keyring.delete_password(_SERVICE, old_id)
-                    except Exception:
-                        pass
-                entry.id = new_id
-                changed = True
-
-        if changed:
-            self._save_index()
-            logger.info("Migrated %d UUID entry IDs to numeric IDs.",
-                        sum(1 for e in self._entries))
+    def _save_secret(self, entry_id: str, secret: str) -> None:
+        credential_store.set_secret(entry_id, secret)
 
     def _save_index(self) -> None:
         path = _index_path()
@@ -266,7 +179,4 @@ class Vault:
                 encoding="utf-8",
             )
         except Exception:
-            logger.exception("Failed to save vault_index.json.")
-
-    def _save_secret(self, entry_id: str, secret: str) -> None:
-        credential_store.set_secret(entry_id, secret)
+            logger.exception("Failed to save sesame_vault.json.")

@@ -223,7 +223,7 @@ class SesameApp:
                     entry = Entry.from_dict(ed)
                     secret = secrets.get(entry.id, "")
                     self._vault.add_entry(entry, secret)
-                    otp = otp_secrets.get(ed.get("id", ""))
+                    otp = otp_secrets.get(ed.get("id", ""), "")
                     if otp:
                         self._vault.set_otp_secret(entry.id, otp)
                     count += 1
@@ -255,7 +255,7 @@ class SesameApp:
             updated_entry, secret = dlg.result_entry()
             self._vault.update_entry(updated_entry, secret or None)
             otp = dlg._result_otp_secret
-            if otp is not None:
+            if otp is not None:  # empty string intentionally clears OTP
                 self._vault.set_otp_secret(updated_entry.id, otp)
             self._panel.refresh()
 

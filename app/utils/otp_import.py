@@ -45,7 +45,7 @@ def parse_uris(text: str) -> list[dict]:
     return results
 
 
-def scan_qr_image(path: str) -> list[str]:
+def scan_qr_image(path: str) -> list[str] | None:
     """Decode QR code(s) from an image file.
 
     Returns a list of decoded URI strings, or None if pyzbar is unavailable.

@@ -94,7 +94,7 @@ sesame/
 │       ├── credential_store.py  # Direct win32cred access for secrets and OTP secrets
 │       ├── icons.py         # Font Awesome 6 icon codepoints
 │       ├── lock_manager.py  # Master password lock per category
-│       ├── otp_import.py    # Parse otpauth:// and Google Authenticator migration URIs
+│       ├── otp_import.py    # Parse otpauth:// and Google Authenticator migration URIs (returns list[str] | None for QR scan)
 │       ├── startup.py       # Windows startup registry helper
 │       └── vault_io.py      # AES-256-GCM encrypt/decrypt for export files
 ├── resources/
@@ -115,8 +115,7 @@ Secrets are never written to disk in plaintext.
 | What | Where |
 |---|---|
 | Entry metadata (name, username, url, tags, has_otp…) | `%APPDATA%\Sesame\sesame_vault.json` — plain JSON, no secrets |
-| Password / secret | Windows Credential Manager — `SZM:<entry-id>` |
-| OTP secret | Windows Credential Manager — `SZM:<entry-id>:otp` |
+| Password + OTP secret | Windows Credential Manager — `SZM:<entry-id>`, blob = `{"p":"…","o":"…"}` |
 | UI preferences (bubble position, default category, master password hash) | `%APPDATA%\Sesame\config.json` — no secrets here |
 
 `entry-id` is a short, reused-gap integer assigned locally by the vault (not a global UUID), keeping each Credential Manager entry compact. `UserName` is left empty — the actual account username is stored in `sesame_vault.json`, not duplicated into Credential Manager. Secrets from older versions are migrated to this layout automatically the first time they're read.

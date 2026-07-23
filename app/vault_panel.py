@@ -650,7 +650,6 @@ class VaultPanel(QWidget):
         self._clipboard.copy(entry_id, secret)
 
     def _on_copy_otp_requested(self, entry_id: str) -> None:
-        import time
         entry = next((e for e in self._vault.entries if e.id == entry_id), None)
         if not entry or not entry.has_otp:
             return
