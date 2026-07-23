@@ -1,4 +1,4 @@
-## Sesame v1.2
+## Sesame v1.3
 
 > **Se**crets **Sa**fe **Me**moriser
 
@@ -6,54 +6,36 @@ A lightweight Windows 64-bit desktop password manager. Stores secrets in Windows
 
 ---
 
-### What's new in v1.2
+### What's new in v1.3
 
-**Auto-login**
-Set a delay (milliseconds) per entry. After clicking the URL, Sesame waits then injects `username → TAB → password` as keystrokes into the focused window. No trailing Enter — you verify focus before submitting. Windows only.
+**TOTP / OTP support**
+Store a base32 TOTP secret per entry. The live 6-digit code is displayed in the entry row, updated every second with a remaining-time counter. Click the clock button to copy the current code to clipboard.
 
-**Export / Import inline in Settings**
-Password fields and file picker are now on the Settings → Data tab directly. No separate popup window.
+Import OTP secrets from Google Authenticator:
+- Paste an `otpauth://` or `otpauth-migration://` URI directly in **Settings → Data**
+- Or browse a QR-code image file (requires `pyzbar`)
+- Matching by service name + account — updates existing entries or creates new ones
 
 **Compact credential storage**
-Secrets are now stored via `win32cred` (pywin32) with short numeric IDs (`SZM:0`, `SZM:1`…) instead of UUIDs. Eliminates the silent save failures on corporate machines caused by the 2 560-byte Windows Credential Manager limit. Existing entries migrate automatically on first launch.
+Passwords and OTP secrets are now stored together in a single Windows Credential Manager entry per vault item (`{"p": "…", "o": "…"}`), halving the number of credentials compared to v1.2.
 
-**Tag filter: single-select**
-Click a tag to filter entries, click again to deselect.
+**Auto-login (Windows)**
+Set a delay (ms) per entry. After clicking the URL, Sesame waits then injects `username → TAB → password` as keystrokes into the focused window. No trailing Enter — you verify focus before submitting.
 
-**Tray menu improvements**
-Left-click now opens the context menu. Dark theme matches the app.
+**URL as inline link icon**
+The URL is now shown as a small link icon (⛓) inline with the entry name rather than as a separate text line.
+
+**OTP colour**
+The OTP code label uses a bright, easy-to-read colour (`#a5b4fc`) distinct from the entry name.
 
 ---
 
-### Features
+### Also in v1.3
 
-**Core**
-- Floating always-on-top bubble — drag to any position
-- Vault panel — search, category filter, tag filter, drag-to-reorder entries
-- Click ⊙ to restore bubble; click ✕ to close panel
-
-**Entries**
-- Fields: Name, Username, URL (clickable), Secret, Tags, Category
-- Inline 👤 copy username / 🔑 copy password (30 s auto-clear, excluded from Win+V)
-- Inline ✏ edit (pre-loads existing secret)
-- 🎲 Password generator — length, letters/digits/special; remembers settings
-
-**Security**
-- Secrets in Windows Credential Manager (DPAPI-encrypted, per user)
-- Master password (PBKDF2-HMAC-SHA256, 600 000 iterations) per category; unlocked once per session
-- Clipboard excluded from Windows Clipboard History (Win+V)
-
-**Settings**
-- General: bubble opacity, default category, background image, component opacity
-- Categories: rename, delete
-- Security: master password management
-- Data: export / import vault inline
-
-**System tray**
-- Show / Hide Bubble (context-aware)
-- Locate Sesame — flash bubble at screen centre
-- ❤ Support Sesame
-- Exit
+- Export / Import (Settings → Data tab) now includes OTP secrets in the encrypted `.sesame` file
+- Focus border on inputs changed to white (`#e8eaed`) for consistency
+- Scrollbar always reserves space — buttons no longer hidden under the scrollbar
+- Code review: removed all pre-v1.2 migration code; fixed vault-wipe bug when one entry fails to parse; dead code cleanup
 
 ---
 
