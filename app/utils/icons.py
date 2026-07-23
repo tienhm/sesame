@@ -58,3 +58,5 @@ class FA:
     COPY       = chr(0xf0c5)  # fa-copy
     LOCK       = chr(0xf023)  # fa-lock
     UNLOCK     = chr(0xf09c)  # fa-unlock
+    CLOCK      = chr(0xf1da)  # fa-clock-rotate-left → OTP
+    LINK       = chr(0xf0c1)  # fa-link → URL inline

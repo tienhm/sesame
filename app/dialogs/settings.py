@@ -416,6 +416,41 @@ class SettingsDialog(QDialog):
         self._imp_btn.clicked.connect(self._on_import)
         layout.addWidget(self._imp_btn)
 
+        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
+        layout.addWidget(sep2)
+
+        # ── Import OTP ────────────────────────────────────────────────
+        otp_lbl = QLabel("Import OTP secrets")
+        otp_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(otp_lbl)
+
+        otp_desc = QLabel(
+            "Paste an otpauth:// or otpauth-migration:// URI from Google\n"
+            "Authenticator, or browse a QR-code image file."
+        )
+        otp_desc.setWordWrap(True)
+        layout.addWidget(otp_desc)
+
+        otp_uri_row = QHBoxLayout()
+        self._otp_uri_edit = QLineEdit()
+        self._otp_uri_edit.setPlaceholderText("otpauth://totp/… or otpauth-migration://offline?data=…")
+        otp_browse_btn = QPushButton("QR image…")
+        otp_browse_btn.setProperty("flat", True)
+        otp_browse_btn.setMinimumWidth(90)
+        otp_browse_btn.clicked.connect(self._browse_otp_qr)
+        otp_uri_row.addWidget(self._otp_uri_edit, stretch=1)
+        otp_uri_row.addWidget(otp_browse_btn)
+        layout.addLayout(otp_uri_row)
+
+        self._otp_msg = QLabel("")
+        self._otp_msg.setStyleSheet("font-size: 11px;")
+        self._otp_msg.setWordWrap(True)
+        layout.addWidget(self._otp_msg)
+
+        otp_import_btn = QPushButton("Import OTP secrets")
+        otp_import_btn.clicked.connect(self._on_import_otp)
+        layout.addWidget(otp_import_btn)
+
         layout.addStretch()
         return w
 
@@ -455,7 +490,8 @@ class SettingsDialog(QDialog):
         if not path:
             return
         try:
-            data = _export_vault(self._vault.entries, self._vault.get_secret, password)
+            data = _export_vault(self._vault.entries, self._vault.get_secret, password,
+                                 get_otp_secret_fn=self._vault.get_otp_secret)
             with open(path, "wb") as f:
                 f.write(data)
             self._exp_pw.clear()
@@ -472,12 +508,16 @@ class SettingsDialog(QDialog):
         path = self._imp_path.text()
         password = self._imp_pw.text()
         try:
-            file_bytes = open(path, "rb").read()
-            entries_dicts, secrets = _import_vault(file_bytes, password)
+            with open(path, "rb") as f:
+                file_bytes = f.read()
+            entries_dicts, secrets, otp_secrets = _import_vault(file_bytes, password)
             count = 0
             for ed in entries_dicts:
                 entry = Entry.from_dict(ed)
                 self._vault.add_entry(entry, secrets.get(entry.id, ""))
+                otp = otp_secrets.get(ed.get("id", ""))
+                if otp:
+                    self._vault.set_otp_secret(entry.id, otp)
                 count += 1
             if self._panel:
                 self._panel.refresh()
@@ -491,6 +531,78 @@ class SettingsDialog(QDialog):
         except Exception as e:
             self._imp_err.setStyleSheet("color: #e74c3c; font-size: 11px;")
             self._imp_err.setText(f"Import failed: {e}")
+
+    def _browse_otp_qr(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select QR Code Image", "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)"
+        )
+        if not path:
+            return
+        from app.utils.otp_import import scan_qr_image
+        uris = scan_qr_image(path)
+        if uris is None:
+            self._otp_msg.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._otp_msg.setText(
+                "pyzbar is not installed. Install it with:\n"
+                "pip install pyzbar\n"
+                "Or paste the URI directly into the text field."
+            )
+            return
+        if not uris:
+            self._otp_msg.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._otp_msg.setText("No QR code found in image.")
+            return
+        self._otp_uri_edit.setText("\n".join(uris))
+        self._otp_msg.setStyleSheet("color: #2d6a4f; font-size: 11px;")
+        self._otp_msg.setText(f"Found {len(uris)} QR code(s). Click Import to proceed.")
+
+    def _on_import_otp(self) -> None:
+        from app.utils.otp_import import parse_uris
+        text = self._otp_uri_edit.text().strip()
+        if not text:
+            self._otp_msg.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._otp_msg.setText("Paste a URI or scan a QR image first.")
+            return
+        entries = parse_uris(text)
+        if not entries:
+            self._otp_msg.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._otp_msg.setText("No valid OTP entries found in the input.")
+            return
+        from app.models.entry import Entry
+        updated, created = 0, 0
+        for otp in entries:
+            secret   = otp["secret"]
+            name     = otp["name"] or "OTP"      # service name (GitHub, Google…)
+            account  = otp.get("account", "")    # user account (email, username)
+            # Match existing entry: name matches service AND username matches account
+            match = next(
+                (e for e in self._vault.entries
+                 if e.name.lower() == name.lower()
+                 and (not account or not e.username
+                      or e.username.lower() == account.lower())),
+                None
+            )
+            if match:
+                self._vault.set_otp_secret(match.id, secret)
+                updated += 1
+            else:
+                new_entry = Entry(
+                    name=name,
+                    username=account,
+                    category="General",
+                    has_otp=True,
+                )
+                self._vault.add_entry(new_entry, "")
+                self._vault.set_otp_secret(new_entry.id, secret)
+                created += 1
+        if self._panel:
+            self._panel.refresh()
+        self._otp_uri_edit.clear()
+        self._otp_msg.setStyleSheet("color: #2d6a4f; font-size: 11px;")
+        self._otp_msg.setText(
+            f"Imported: {updated} updated, {created} new."
+        )
 
     def _master_pw_status_text(self) -> str:
         return "✔  Master password is set." if self._lock_mgr.has_master_password() \

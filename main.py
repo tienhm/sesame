@@ -5,7 +5,7 @@ Wires together: Vault, ClipboardManager, Bubble, VaultPanel, TrayIcon.
 
 from __future__ import annotations
 
-__version__ = "1.2"
+__version__ = "1.3"
 
 import ctypes
 import logging
@@ -145,6 +145,8 @@ class SesameApp:
         if dlg.exec() == AddEditEntryDialog.DialogCode.Accepted:
             entry, secret = dlg.result_entry()
             self._vault.add_entry(entry, secret)
+            if dlg._result_otp_secret:
+                self._vault.set_otp_secret(entry.id, dlg._result_otp_secret)
             self._panel.refresh()
 
 
@@ -187,7 +189,8 @@ class SesameApp:
         if not path:
             return
         try:
-            data = export_vault(self._vault.entries, self._vault.get_secret, dlg.password())
+            data = export_vault(self._vault.entries, self._vault.get_secret, dlg.password(),
+                               get_otp_secret_fn=self._vault.get_otp_secret)
             with open(path, "wb") as f:
                 f.write(data)
             QMessageBox.information(
@@ -214,12 +217,15 @@ class SesameApp:
         dlg = ImportPasswordDialog(path, None)
         while dlg.exec() == ImportPasswordDialog.DialogCode.Accepted:
             try:
-                entries_dicts, secrets = import_vault(file_bytes, dlg.password())
+                entries_dicts, secrets, otp_secrets = import_vault(file_bytes, dlg.password())
                 count = 0
                 for ed in entries_dicts:
                     entry = Entry.from_dict(ed)
                     secret = secrets.get(entry.id, "")
                     self._vault.add_entry(entry, secret)
+                    otp = otp_secrets.get(ed.get("id", ""))
+                    if otp:
+                        self._vault.set_otp_secret(entry.id, otp)
                     count += 1
                 self._panel.refresh()
                 QMessageBox.information(
@@ -248,6 +254,9 @@ class SesameApp:
         if dlg.exec() == AddEditEntryDialog.DialogCode.Accepted:
             updated_entry, secret = dlg.result_entry()
             self._vault.update_entry(updated_entry, secret or None)
+            otp = dlg._result_otp_secret
+            if otp is not None:
+                self._vault.set_otp_secret(updated_entry.id, otp)
             self._panel.refresh()
 
     def _on_delete_requested(self, entry_id: str) -> None:

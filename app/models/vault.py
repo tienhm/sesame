@@ -79,10 +79,23 @@ class Vault:
         self._entries = [e for e in self._entries if e.id != entry_id]
         self._save_index()
         credential_store.delete_secret(entry_id)
+        credential_store.delete_otp_secret(entry_id)
         try:
             keyring.delete_password(_SERVICE, entry_id)  # legacy location, if never migrated
         except keyring.errors.PasswordDeleteError:
             pass
+
+    def get_otp_secret(self, entry_id: str) -> str:
+        return credential_store.get_otp_secret(entry_id)
+
+    def set_otp_secret(self, entry_id: str, secret: str) -> None:
+        credential_store.set_otp_secret(entry_id, secret)
+        # Mark entry as having OTP and persist
+        for e in self._entries:
+            if e.id == entry_id:
+                e.has_otp = bool(secret)
+                break
+        self._save_index()
 
     def get_secret(self, entry_id: str) -> str:
         secret = credential_store.get_secret(entry_id)
@@ -163,6 +176,8 @@ class Vault:
             return
         # One-time migration: re-assign numeric IDs to UUID-style entries
         self._migrate_ids_to_numeric()
+        # One-time migration: move otp_secret from JSON to Credential Manager
+        self._migrate_otp_secrets_to_cred_manager()
 
     def _migrate_from_credential_manager(self) -> None:
         """One-time migration: move vault_index from Credential Manager to file."""
@@ -183,6 +198,24 @@ class Vault:
         except Exception:
             logger.exception("Migration failed — starting fresh.")
             self._entries = []
+
+    def _migrate_otp_secrets_to_cred_manager(self) -> None:
+        """Move otp_secret values stored in JSON → Credential Manager."""
+        path = _index_path()
+        try:
+            raw_data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        changed = False
+        for d, entry in zip(raw_data, self._entries):
+            secret_in_json = d.get("otp_secret", "")
+            if secret_in_json:
+                credential_store.set_otp_secret(entry.id, secret_in_json)
+                entry.has_otp = True
+                changed = True
+        if changed:
+            self._save_index()
+            logger.info("Migrated OTP secrets from JSON to Credential Manager.")
 
     def _migrate_ids_to_numeric(self) -> None:
         """Re-assign short numeric IDs to entries that still have UUID-style IDs."""

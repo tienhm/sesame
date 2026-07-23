@@ -1,0 +1,12 @@
+#!/bin/bash
+# Sesame CLI wrapper for Linux/macOS
+# Usage: sesame get, sesame list, sesame add, etc.
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Activate venv
+source "$SCRIPT_DIR/.venv/bin/activate"
+
+# Run CLI
+python "$SCRIPT_DIR/cli.py" "$@"

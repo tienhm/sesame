@@ -29,7 +29,8 @@ _ITERATIONS = 600_000
 _FILE_VERSION = 1
 
 
-def export_vault(entries, get_secret_fn, password: str) -> bytes:
+def export_vault(entries, get_secret_fn, password: str,
+                 get_otp_secret_fn=None) -> bytes:
     """Return encrypted .sesame file bytes."""
     salt = os.urandom(16)
     nonce = os.urandom(12)
@@ -38,6 +39,11 @@ def export_vault(entries, get_secret_fn, password: str) -> bytes:
     payload = {
         "entries": [e.to_dict() for e in entries],
         "secrets": {e.id: get_secret_fn(e.id) for e in entries},
+        "otp_secrets": {
+            e.id: get_otp_secret_fn(e.id)
+            for e in entries
+            if e.has_otp and get_otp_secret_fn
+        },
     }
     plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
@@ -78,7 +84,7 @@ def import_vault(file_bytes: bytes, password: str) -> tuple[list[dict], dict[str
         raise ValueError("Wrong password or corrupted file.")
 
     payload = json.loads(plaintext.decode("utf-8"))
-    return payload["entries"], payload["secrets"]
+    return payload["entries"], payload["secrets"], payload.get("otp_secrets", {})
 
 
 def _derive_key(password: bytes, salt: bytes) -> bytes:

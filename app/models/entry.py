@@ -12,8 +12,9 @@ class Entry:
     category: str
     tags: list[str] = field(default_factory=list)
     url: str = ""
-    auto_login_ms: int = 0  # 0/absent = disabled; else ms to wait after opening url before sending keys
-    id: str = ""  # assigned by Vault.add_entry — short, reused-gap int as str
+    auto_login_ms: int = 0
+    has_otp: bool = False  # True when an OTP secret is stored in Credential Manager
+    id: str = ""
 
     # ------------------------------------------------------------------
     # Serialisation helpers (secret is NOT stored here — lives in keyring)
@@ -28,6 +29,7 @@ class Entry:
             "tags": self.tags,
             "url": self.url,
             "auto_login_ms": self.auto_login_ms,
+            "has_otp": self.has_otp,
         }
 
     @classmethod
@@ -55,6 +57,7 @@ class Entry:
             tags=tags,
             url=data.get("url", ""),
             auto_login_ms=auto_login_ms,
+            has_otp=bool(data.get("has_otp") or data.get("otp_secret")),
         )
 
     @staticmethod

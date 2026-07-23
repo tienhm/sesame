@@ -1,4 +1,4 @@
-# Sesame  `v1.1`
+# Sesame  `v1.3`
 
 > **Se**crets **Sa**fe **Me**moriser
 
@@ -13,19 +13,22 @@ No administrator privileges required. Suitable for standard corporate user accou
 - **Floating bubble** — small always-on-top button, draggable to any screen position, remembers position between sessions
 - **Vault panel** — title bar with ⊙ restore and ✕ close; draggable by the caption; real-time search, category filter, and tag filter
 - **Tags** — attach multiple comma-separated tags to each entry; filter by one or more tags (AND logic) using the left panel
-- **URL field** — optional URL per entry; shown as a clickable link that opens the default browser
-- **Copy to clipboard** — 👤 copies username (flash feedback), 🔑 copies password with 30-second auto-clear countdown; neither is stored in Windows Clipboard History (Win+V)
-- **In-row edit** — ✏️ button on each entry opens the edit dialog directly; existing secret is pre-loaded
-- **Password generator** — 🎲 button in the edit dialog opens a generator with configurable length, character sets (letters, digits, special); options are remembered between opens
-- **Single instance** — launching a second instance (or using *Locate Sesame* in the tray) signals the first to flash the bubble at screen centre
-- **Categories** — organize entries into named groups; rename or delete via Settings
-- **Default category** — configure a category to be pre-selected on startup
-- **Background image** — set a custom photo as the panel background; drag the viewport to choose which region to display; adjust component opacity so the image shows through the UI
-- **Settings** — single dialog covering General (opacity, background image, default category), Categories, and Security
-- **Master password** — optionally protect one or more categories with a shared master password; prompted once per session
-- **Start with Windows** — enabled by default; toggle from Settings (no admin required)
-- **Secure storage** — secrets stored in Windows Credential Manager (DPAPI-encrypted, tied to your Windows account)
-- **Export / Import** — back up the entire vault to an encrypted `.sesame` file; restore it on any machine using a password you choose
+- **URL** — optional per entry; a small link icon appears inline with the name and opens the default browser
+- **Auto-login** — set a delay (ms) per entry; after opening the URL Sesame injects `username → TAB → password` as keystrokes (Windows only)
+- **OTP / TOTP** — store a base32 TOTP secret per entry; the live 6-digit code is displayed in the entry row and updates every second; click the clock button to copy; import from Google Authenticator QR codes or migration URIs via **Settings → Data**
+- **Copy to clipboard** — 👤 username (flash feedback), 🔑 password (30 s auto-clear countdown); neither stored in Windows Clipboard History (Win+V); countdown mirrors on the bubble when panel is closed
+- **In-row edit** — ✏️ button on each entry; existing secret and OTP pre-loaded
+- **Password generator** — 🎲 button; configurable length, character sets; options remembered between opens; cryptographically secure (`secrets.choice`)
+- **Drag-to-reorder entries** — drag any row up or down; order saved immediately
+- **Single instance** — second launch flashes the bubble at screen centre; *Locate Sesame* in the tray does the same
+- **Categories** — organize entries; rename or delete via Settings
+- **Default category** — pre-selected on startup (Settings → General)
+- **Background image** — custom photo as panel background; drag viewport to choose region; component opacity slider
+- **Settings** — General, Categories, Security, Data (export / import / OTP import) tabs
+- **Master password** — one shared password protects selected categories; prompted once per session
+- **Start with Windows** — enabled by default; no admin required
+- **Secure storage** — passwords and OTP secrets in Windows Credential Manager (DPAPI-encrypted); metadata in `%APPDATA%\Sesame\sesame_vault.json`
+- **Export / Import** — AES-256-GCM encrypted `.sesame` files including OTP secrets; PBKDF2-HMAC-SHA256 (600 000 iterations)
 
 ---
 
@@ -87,8 +90,11 @@ sesame/
 │   │   ├── entry.py         # Entry dataclass (id, name, username, url, tags, category)
 │   │   └── vault.py         # CRUD operations via Windows Credential Manager
 │   └── utils/
-│       ├── clipboard.py     # Copy to clipboard + auto-clear after 30 s
+│       ├── clipboard.py     # Copy to clipboard + auto-clear after 30 s (Win32, Win+V excluded)
+│       ├── credential_store.py  # Direct win32cred access for secrets and OTP secrets
+│       ├── icons.py         # Font Awesome 6 icon codepoints
 │       ├── lock_manager.py  # Master password lock per category
+│       ├── otp_import.py    # Parse otpauth:// and Google Authenticator migration URIs
 │       ├── startup.py       # Windows startup registry helper
 │       └── vault_io.py      # AES-256-GCM encrypt/decrypt for export files
 ├── resources/
@@ -108,8 +114,9 @@ Secrets are never written to disk in plaintext.
 
 | What | Where |
 |---|---|
-| Entry metadata (name, username, url, tags, category) | `%APPDATA%\Sesame\sesame_vault.json` — plain JSON, no secrets |
-| Each secret | Individual Credential Manager entry — `TargetName` = `SZM:<entry-id>`, `UserName` = "" |
+| Entry metadata (name, username, url, tags, has_otp…) | `%APPDATA%\Sesame\sesame_vault.json` — plain JSON, no secrets |
+| Password / secret | Windows Credential Manager — `SZM:<entry-id>` |
+| OTP secret | Windows Credential Manager — `SZM:<entry-id>:otp` |
 | UI preferences (bubble position, default category, master password hash) | `%APPDATA%\Sesame\config.json` — no secrets here |
 
 `entry-id` is a short, reused-gap integer assigned locally by the vault (not a global UUID), keeping each Credential Manager entry compact. `UserName` is left empty — the actual account username is stored in `sesame_vault.json`, not duplicated into Credential Manager. Secrets from older versions are migrated to this layout automatically the first time they're read.

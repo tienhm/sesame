@@ -19,7 +19,10 @@ Click "All" → clear filter.
 
 from __future__ import annotations
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import Qt, QPoint, QRectF, QTimer, QUrl, Signal
 from PySide6.QtGui import (
@@ -61,10 +64,11 @@ _ALL_CATEGORIES = "All categories"
 class EntryRowWidget(QWidget):
     """Custom widget rendered inside each QListWidgetItem."""
 
-    copy_user_requested = Signal(str)    # entry_id
-    edit_row_requested  = Signal(str)    # entry_id
+    copy_user_requested   = Signal(str)  # entry_id
+    edit_row_requested    = Signal(str)  # entry_id
     copy_secret_requested = Signal(str)  # entry_id
-    url_open_requested  = Signal(str)    # entry_id
+    copy_otp_requested    = Signal(str)  # entry_id
+    url_open_requested    = Signal(str)  # entry_id
 
     def __init__(self, entry: Entry, countdown: int | None = None, parent=None) -> None:
         super().__init__(parent)
@@ -82,19 +86,33 @@ class EntryRowWidget(QWidget):
         text_block = QVBoxLayout()
         text_block.setSpacing(1)
 
+        # Name row: name label + optional link icon inline
+        name_row = QHBoxLayout()
+        name_row.setSpacing(4)
+        name_row.setContentsMargins(0, 0, 0, 0)
+
         name_lbl = QLabel(entry.name)
         name_lbl.setObjectName("EntryName")
-        text_block.addWidget(name_lbl)
+        name_row.addWidget(name_lbl)
 
         if entry.url:
-            url_lbl = QLabel(f'<a href="{entry.url}" style="color:#5865f2;text-decoration:none;">{entry.url}</a>')
-            url_lbl.setObjectName("EntryUrl")
-            url_lbl.setOpenExternalLinks(False)  # we open it ourselves, to chain auto-login after
-            url_lbl.setTextInteractionFlags(
-                Qt.TextInteractionFlag.TextBrowserInteraction
-            )
-            url_lbl.linkActivated.connect(lambda _url: self.url_open_requested.emit(self.entry_id))
-            text_block.addWidget(url_lbl)
+            link_btn = QPushButton(FA.LINK)
+            link_btn.setObjectName("LinkButton")
+            link_btn.setFixedSize(16, 16)
+            link_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            link_btn.setToolTip(entry.url)
+            link_btn.clicked.connect(lambda: self.url_open_requested.emit(self.entry_id))
+            name_row.addWidget(link_btn)
+
+        name_row.addStretch()
+        text_block.addLayout(name_row)
+
+        # OTP code display label (updated live by VaultPanel timer)
+        self._otp_lbl = None
+        if entry.has_otp:
+            self._otp_lbl = QLabel("● ● ●")
+            self._otp_lbl.setObjectName("OtpLabel")
+            text_block.addWidget(self._otp_lbl)
 
         layout.addLayout(text_block, stretch=1)
 
@@ -106,7 +124,6 @@ class EntryRowWidget(QWidget):
             self._copy_user_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
             self._copy_user_btn.setToolTip("Copy username")
             self._copy_user_btn.clicked.connect(self._on_copy_user_clicked)
-            layout.addWidget(self._copy_user_btn)
 
         # Copy secret button
         self._copy_btn = QPushButton(_COPY_PASS)
@@ -115,6 +132,16 @@ class EntryRowWidget(QWidget):
         self._copy_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._copy_btn.setToolTip("Copy password / secret")
         self._copy_btn.clicked.connect(lambda: self.copy_secret_requested.emit(self.entry_id))
+
+        # OTP button (clock icon — click to copy)
+        self._otp_btn = None
+        if entry.has_otp:
+            self._otp_btn = QPushButton(FA.CLOCK)
+            self._otp_btn.setObjectName("CopyButton")
+            self._otp_btn.setFixedSize(26, 26)
+            self._otp_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            self._otp_btn.setToolTip("Copy OTP code")
+            self._otp_btn.clicked.connect(lambda: self.copy_otp_requested.emit(self.entry_id))
 
         # Edit button
         self._edit_btn = QPushButton(_EDIT)
@@ -127,6 +154,11 @@ class EntryRowWidget(QWidget):
         if countdown is not None:
             self._set_countdown(countdown)
 
+        # Order: 🕐 OTP | 👤 user | 🔑 pass | ✏ edit
+        if self._otp_btn:
+            layout.addWidget(self._otp_btn)
+        if self._has_username:
+            layout.addWidget(self._copy_user_btn)
         layout.addWidget(self._copy_btn)
         layout.addWidget(self._edit_btn)
 
@@ -199,6 +231,12 @@ class VaultPanel(QWidget):
         self._build_ui()
         self._connect_signals()
         self.refresh()
+
+        # Timer to refresh OTP codes every 5 s
+        self._otp_timer = QTimer(self)
+        self._otp_timer.setInterval(1_000)
+        self._otp_timer.timeout.connect(self._update_otp_buttons)
+        self._otp_timer.start()
 
     # ------------------------------------------------------------------
     # Window setup
@@ -282,6 +320,7 @@ class VaultPanel(QWidget):
         self._entry_list = QListWidget()
         self._entry_list.setObjectName("EntryList")
         self._entry_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._entry_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self._entry_list.setSpacing(2)
         self._entry_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         self._entry_list.setDefaultDropAction(Qt.DropAction.MoveAction)
@@ -547,6 +586,7 @@ class VaultPanel(QWidget):
             row_widget.copy_user_requested.connect(self._on_copy_user_requested)
             row_widget.edit_row_requested.connect(self.edit_requested)
             row_widget.copy_secret_requested.connect(self._on_copy_requested)
+            row_widget.copy_otp_requested.connect(self._on_copy_otp_requested)
             row_widget.url_open_requested.connect(self._on_url_open_requested)
             self._row_widgets[entry.id] = row_widget
 
@@ -557,6 +597,7 @@ class VaultPanel(QWidget):
             self._entry_list.setItemWidget(item, row_widget)
 
         self._on_entry_selection_changed(self._entry_list.currentRow())
+        self._update_otp_buttons()
 
     def _apply_filter(self) -> None:
         self._rebuild_entries()
@@ -607,6 +648,65 @@ class VaultPanel(QWidget):
             return
         secret = self._vault.get_secret(entry_id) or ""
         self._clipboard.copy(entry_id, secret)
+
+    def _on_copy_otp_requested(self, entry_id: str) -> None:
+        import time
+        entry = next((e for e in self._vault.entries if e.id == entry_id), None)
+        if not entry or not entry.has_otp:
+            return
+        if not self._ensure_unlocked(entry):
+            return
+        try:
+            import pyotp
+            otp_secret = self._vault.get_otp_secret(entry_id)
+            if not otp_secret:
+                return
+            totp = pyotp.TOTP(otp_secret)
+            code = totp.now()
+            self._clipboard.copy_plain(code)
+            # Show ✓ briefly then restore clock icon
+            widget = self._row_widgets.get(entry_id)
+            if widget and widget._otp_btn:
+                widget._otp_btn.setText("✓")
+                widget._otp_btn.setProperty("copied", True)
+                widget._otp_btn.style().unpolish(widget._otp_btn)
+                widget._otp_btn.style().polish(widget._otp_btn)
+                QTimer.singleShot(1500, lambda: self._reset_otp_btn(entry_id))
+        except Exception as e:
+            logger.error("OTP generation failed: %s", e)
+
+    def _reset_otp_btn(self, entry_id: str) -> None:
+        widget = self._row_widgets.get(entry_id)
+        if widget and widget._otp_btn:
+            widget._otp_btn.setText(FA.CLOCK)
+            widget._otp_btn.setProperty("copied", False)
+            widget._otp_btn.style().unpolish(widget._otp_btn)
+            widget._otp_btn.style().polish(widget._otp_btn)
+
+    def _update_otp_buttons(self) -> None:
+        """Refresh all visible OTP labels with current codes."""
+        for entry_id, widget in self._row_widgets.items():
+            if widget._otp_lbl:
+                self._refresh_otp_code(entry_id, widget)
+
+    def _refresh_otp_code(self, entry_id: str, widget) -> None:
+        if not widget._otp_lbl:
+            return
+        try:
+            import pyotp, time
+            secret = self._vault.get_otp_secret(entry_id)
+            if not secret:
+                return
+            totp = pyotp.TOTP(secret)
+            code = totp.now()
+            remaining = int(totp.interval - time.time() % totp.interval)
+            # Display as "123 456  (28s)" — spaced for readability
+            spaced = f"{code[:3]} {code[3:]}"
+            widget._otp_lbl.setText(f"{spaced}  {remaining}s")
+            if widget._otp_btn:
+                widget._otp_btn.setToolTip(f"OTP: {code} — {remaining}s remaining\nClick to copy")
+        except Exception:
+            pass
 
     def _on_url_open_requested(self, entry_id: str) -> None:
         entry = next((e for e in self._vault.entries if e.id == entry_id), None)

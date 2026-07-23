@@ -120,6 +120,29 @@ class AddEditEntryDialog(QDialog):
         self._auto_login_edit.setValidator(QIntValidator(0, 60_000, self))
         form.addRow("Auto-login", self._auto_login_edit)
 
+        # OTP secret (TOTP) — hidden like password
+        self._otp_edit = QLineEdit()
+        self._otp_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._otp_edit.setPlaceholderText("Base32 secret from authenticator app (optional)")
+        self._otp_show_btn = QPushButton(FA.EYE)
+        self._otp_show_btn.setObjectName("DialogIcon")
+        self._otp_show_btn.setFixedSize(28, 28)
+        self._otp_show_btn.setCheckable(True)
+        self._otp_show_btn.setToolTip("Show / hide OTP secret")
+        self._otp_show_btn.toggled.connect(
+            lambda on: (
+                self._otp_edit.setEchoMode(
+                    QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password
+                ),
+                self._otp_show_btn.setText(FA.EYE_SLASH if on else FA.EYE),
+            )
+        )
+        otp_row = QHBoxLayout()
+        otp_row.setSpacing(4)
+        otp_row.addWidget(self._otp_edit, stretch=1)
+        otp_row.addWidget(self._otp_show_btn)
+        form.addRow("OTP secret", otp_row)
+
         # Tags
         self._tags_edit = QLineEdit()
         self._tags_edit.setPlaceholderText("e.g. work, 2fa, vpn")
@@ -167,6 +190,8 @@ class AddEditEntryDialog(QDialog):
         self._url_edit.setText(entry.url)
         if entry.auto_login_ms:
             self._auto_login_edit.setText(str(entry.auto_login_ms))
+        if entry.has_otp:
+            self._otp_edit.setText(self._vault.get_otp_secret(entry.id))
         self._tags_edit.setText(", ".join(entry.tags))
         # Load existing secret so show/hide works immediately
         existing_secret = self._vault.get_secret(entry.id)
@@ -214,8 +239,9 @@ class AddEditEntryDialog(QDialog):
         secret   = self._secret_edit.text()
         url      = self._url_edit.text().strip()
         category = self._cat_combo.currentText().strip() or "General"
-        tags     = Entry.parse_tags(self._tags_edit.text())
+        tags          = Entry.parse_tags(self._tags_edit.text())
         auto_login_ms = int(self._auto_login_edit.text() or 0)
+        otp_secret    = self._otp_edit.text().strip().upper().replace(" ", "")
 
         if not name:
             self._error_lbl.setText("Name is required.")
@@ -229,8 +255,10 @@ class AddEditEntryDialog(QDialog):
         self._result_secret   = secret
         self._result_url      = url
         self._result_category = category
-        self._result_tags     = tags
+        self._result_tags          = tags
         self._result_auto_login_ms = auto_login_ms
+        self._result_otp_secret    = otp_secret
+        self._result_has_otp       = bool(otp_secret)
         self.accept()
 
     # ------------------------------------------------------------------
@@ -245,6 +273,7 @@ class AddEditEntryDialog(QDialog):
             tags=self._result_tags,
             url=self._result_url,
             auto_login_ms=self._result_auto_login_ms,
+            has_otp=self._result_has_otp,
         )
         if self._is_edit:
             kwargs["id"] = self._existing_entry.id

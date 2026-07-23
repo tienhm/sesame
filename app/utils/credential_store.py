@@ -27,6 +27,10 @@ def _target_name(entry_id: str) -> str:
     return f"{_TARGET_PREFIX}:{entry_id}"
 
 
+def _otp_target_name(entry_id: str) -> str:
+    return f"{_TARGET_PREFIX}:{entry_id}:otp"
+
+
 def set_secret(entry_id: str, secret: str) -> None:
     if sys.platform != "win32":
         _dev_store[entry_id] = secret
@@ -58,6 +62,45 @@ def get_secret(entry_id: str) -> str:
         return ""
     blob = cred["CredentialBlob"]
     return blob.decode("utf-16-le") if isinstance(blob, (bytes, bytearray)) else str(blob)
+
+
+def set_otp_secret(entry_id: str, secret: str) -> None:
+    if sys.platform != "win32":
+        _dev_store[f"otp:{entry_id}"] = secret
+        return
+    import win32cred
+    credential = {
+        "Type": win32cred.CRED_TYPE_GENERIC,
+        "TargetName": _otp_target_name(entry_id),
+        "UserName": "",
+        "CredentialBlob": secret,
+        "Comment": "Sesame OTP secret",
+        "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
+    }
+    win32cred.CredWrite(credential, 0)
+
+
+def get_otp_secret(entry_id: str) -> str:
+    if sys.platform != "win32":
+        return _dev_store.get(f"otp:{entry_id}", "")
+    import pywintypes, win32cred
+    try:
+        cred = win32cred.CredRead(_otp_target_name(entry_id), win32cred.CRED_TYPE_GENERIC, 0)
+    except pywintypes.error:
+        return ""
+    blob = cred["CredentialBlob"]
+    return blob.decode("utf-16-le") if isinstance(blob, (bytes, bytearray)) else str(blob)
+
+
+def delete_otp_secret(entry_id: str) -> None:
+    if sys.platform != "win32":
+        _dev_store.pop(f"otp:{entry_id}", None)
+        return
+    import pywintypes, win32cred
+    try:
+        win32cred.CredDelete(_otp_target_name(entry_id), win32cred.CRED_TYPE_GENERIC, 0)
+    except pywintypes.error:
+        pass
 
 
 def delete_secret(entry_id: str) -> None:
