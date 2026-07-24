@@ -156,9 +156,11 @@ class Vault:
             raw_data = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return
+        # Match by id, not positional zip — skipped malformed entries would misalign
+        id_to_raw = {d.get("id"): d for d in raw_data}
         changed = False
-        for d, entry in zip(raw_data, self._entries):
-            otp_in_json = d.get("otp_secret", "")
+        for entry in self._entries:
+            otp_in_json = id_to_raw.get(entry.id, {}).get("otp_secret", "")
             if otp_in_json:
                 credential_store.set_otp_secret(entry.id, otp_in_json)
                 entry.has_otp = True

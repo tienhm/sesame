@@ -168,7 +168,8 @@ class EntryRowWidget(QWidget):
         self._copy_user_btn.setProperty("copied", True)
         self._copy_user_btn.style().unpolish(self._copy_user_btn)
         self._copy_user_btn.style().polish(self._copy_user_btn)
-        QTimer.singleShot(1500, self._reset_copy_user_btn)
+        # Use a weak check so the timer doesn't resurrect an orphaned widget
+        QTimer.singleShot(1500, lambda: self._reset_copy_user_btn() if self._copy_user_btn else None)
 
     def _reset_copy_user_btn(self) -> None:
         self._copy_user_btn.setText(_COPY_USER)
@@ -580,7 +581,7 @@ class VaultPanel(QWidget):
             countdown = None
             if active_id == entry.id:
                 countdown = (self._clipboard._remaining
-                             if active_id == entry.id else None)
+                             if self._clipboard._remaining > 0 else None)
 
             row_widget = EntryRowWidget(entry, countdown)
             row_widget.copy_user_requested.connect(self._on_copy_user_requested)
@@ -670,7 +671,7 @@ class VaultPanel(QWidget):
                 widget._otp_btn.setProperty("copied", True)
                 widget._otp_btn.style().unpolish(widget._otp_btn)
                 widget._otp_btn.style().polish(widget._otp_btn)
-                QTimer.singleShot(1500, lambda: self._reset_otp_btn(entry_id))
+                QTimer.singleShot(1500, lambda eid=entry_id: self._reset_otp_btn(eid))
         except Exception as e:
             logger.error("OTP generation failed: %s", e)
 

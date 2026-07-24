@@ -83,8 +83,12 @@ def import_vault(file_bytes: bytes, password: str) -> tuple[list[dict], dict[str
     except Exception:
         raise ValueError("Wrong password or corrupted file.")
 
-    payload = json.loads(plaintext.decode("utf-8"))
-    return payload["entries"], payload["secrets"], payload.get("otp_secrets", {})
+    try:
+        payload = json.loads(plaintext.decode("utf-8"))
+        return (payload["entries"], payload["secrets"],
+                payload.get("otp_secrets", {}))
+    except (KeyError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Vault file is corrupted or unreadable: {exc}") from exc
 
 
 def _derive_key(password: bytes, salt: bytes) -> bytes:

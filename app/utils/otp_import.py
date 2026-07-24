@@ -99,8 +99,9 @@ def _parse_migration_uri(uri: str) -> list[dict]:
         p = urlparse(uri)
         data_b64 = parse_qs(p.query).get("data", [""])[0]
         # URL-encoded '+' → space issue; re-encode
-        data_b64 = data_b64.replace(" ", "+")
-        raw = base64.b64decode(data_b64 + "==")
+        data_b64 = data_b64.replace(" ", "+").rstrip("=")
+        padding = (4 - len(data_b64) % 4) % 4
+        raw = base64.b64decode(data_b64 + "=" * padding)
         return _decode_migration_payload(raw)
     except Exception as e:
         logger.debug("Failed to parse migration URI: %s", e)

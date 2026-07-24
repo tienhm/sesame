@@ -117,7 +117,8 @@ class ImportPasswordDialog(QDialog):
     def _build_ui(self, file_path: str) -> None:
         layout = QVBoxLayout(self)
 
-        info = QLabel(f"Enter the password for:\n<b>{file_path}</b>")
+        import html as _html
+        info = QLabel(f"Enter the password for:\n<b>{_html.escape(file_path)}</b>")
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setWordWrap(True)
         layout.addWidget(info)
