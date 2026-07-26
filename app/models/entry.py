@@ -39,11 +39,6 @@ class Entry:
 
         category = data.get("category", "General") or "General"
 
-        # Migrate legacy data: category stored as comma-separated values
-        if "," in category and not tags:
-            tags = Entry.parse_tags(category)
-            category = "General"
-
         try:
             auto_login_ms = max(0, int(data.get("auto_login_ms") or 0))
         except (TypeError, ValueError):

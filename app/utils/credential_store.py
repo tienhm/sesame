@@ -4,10 +4,6 @@ Layout (single credential per entry):
   TargetName     = "SZM:<entry.id>"
   UserName       = ""  (unused — kept empty)
   CredentialBlob = JSON: {"p": "<password>", "o": "<otp_secret>"}
-                   Legacy plain-text blob is auto-migrated on first read.
-
-Storing both fields in one blob halves the number of Credential Manager
-entries compared to keeping separate SZM:<id> and SZM:<id>:otp entries.
 
 On non-Windows platforms falls back to an in-memory dict.
 """
@@ -102,12 +98,10 @@ def delete_secret(entry_id: str) -> None:
         _dev_store.pop(entry_id, None)
         return
     import pywintypes, win32cred
-    for target in (_target_name(entry_id),
-                   f"{_TARGET_PREFIX}:{entry_id}:otp"):   # legacy
-        try:
-            win32cred.CredDelete(target, win32cred.CRED_TYPE_GENERIC, 0)
-        except pywintypes.error:
-            pass
+    try:
+        win32cred.CredDelete(_target_name(entry_id), win32cred.CRED_TYPE_GENERIC, 0)
+    except pywintypes.error:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -120,40 +114,9 @@ def set_otp_secret(entry_id: str, otp: str) -> None:
 
 
 def get_otp_secret(entry_id: str) -> str:
-    otp = _read_raw(entry_id)["o"]
-    if otp:
-        return otp
-    # Legacy fallback: separate SZM:<id>:otp credential
-    if sys.platform != "win32":
-        return ""
-    import pywintypes, win32cred
-    try:
-        cred = win32cred.CredRead(f"{_TARGET_PREFIX}:{entry_id}:otp",
-                                  win32cred.CRED_TYPE_GENERIC, 0)
-        blob = cred["CredentialBlob"]
-        legacy = (blob.decode("utf-16-le") if isinstance(blob, (bytes, bytearray))
-                  else str(blob)) if blob else ""
-        if legacy:
-            set_otp_secret(entry_id, legacy)   # migrate into main entry
-            try:
-                win32cred.CredDelete(f"{_TARGET_PREFIX}:{entry_id}:otp",
-                                     win32cred.CRED_TYPE_GENERIC, 0)
-            except pywintypes.error:
-                pass
-        return legacy
-    except pywintypes.error:
-        return ""
+    return _read_raw(entry_id)["o"]
 
 
 def delete_otp_secret(entry_id: str) -> None:
     data = _read_raw(entry_id)
     _write_raw(entry_id, data["p"], "")
-    # Clean up legacy separate OTP entry
-    if sys.platform != "win32":
-        return
-    import pywintypes, win32cred
-    try:
-        win32cred.CredDelete(f"{_TARGET_PREFIX}:{entry_id}:otp",
-                             win32cred.CRED_TYPE_GENERIC, 0)
-    except pywintypes.error:
-        pass

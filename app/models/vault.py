@@ -146,28 +146,6 @@ class Vault:
         self._entries = entries
         if changed:
             self._save_index()
-        # v1.2→v1.3: move otp_secret from JSON field to Credential Manager
-        self._migrate_otp_secrets_to_cred_manager()
-
-    def _migrate_otp_secrets_to_cred_manager(self) -> None:
-        """One-time: move otp_secret values stored in JSON → Credential Manager blob."""
-        path = _index_path()
-        try:
-            raw_data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return
-        # Match by id, not positional zip — skipped malformed entries would misalign
-        id_to_raw = {d.get("id"): d for d in raw_data}
-        changed = False
-        for entry in self._entries:
-            otp_in_json = id_to_raw.get(entry.id, {}).get("otp_secret", "")
-            if otp_in_json:
-                credential_store.set_otp_secret(entry.id, otp_in_json)
-                entry.has_otp = True
-                changed = True
-        if changed:
-            self._save_index()
-            logger.info("Migrated OTP secrets from JSON to Credential Manager.")
 
     def _save_secret(self, entry_id: str, secret: str) -> None:
         credential_store.set_secret(entry_id, secret)
