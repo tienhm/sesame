@@ -5,12 +5,13 @@ Wires together: Vault, ClipboardManager, Bubble, VaultPanel, TrayIcon.
 
 from __future__ import annotations
 
-__version__ = "1.3"
+__version__ = "1.4"
 
 import ctypes
 import logging
 import os
 import sys
+import time
 
 # ── Make sure the project root is on sys.path when running from source ──
 sys.path.insert(0, os.path.dirname(__file__))
@@ -28,11 +29,14 @@ from app.dialogs.settings import SettingsDialog
 from app.models.entry import Entry
 from app.models.vault import Vault
 from app.tray import TrayIcon
+from app.utils.activity_log import ActivityLogger
 from app.utils.clipboard import ClipboardManager
 from app.utils.lock_manager import LockManager
+from app.utils.movement_reminder import MovementReminder
 from app.utils.startup import ensure_startup_enabled
 from app.utils.vault_io import export_vault, import_vault
 from app.vault_panel import VaultPanel
+from app.dialogs.movement_confirm import MovementConfirmDialog
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,11 +83,11 @@ class SesameApp:
         self._qt_app = qt_app
         self._config = AppConfig()
         self._vault = Vault()
-        self._clipboard = ClipboardManager()
+        self._clipboard = ClipboardManager(self._config)
         self._lock_mgr = LockManager(self._config)
         self._icon = _make_icon()
 
-        self._panel = VaultPanel(self._vault, self._clipboard, self._lock_mgr)
+        self._panel = VaultPanel(self._vault, self._clipboard, self._lock_mgr, self._config)
         self._bubble = Bubble(self._config)
         self._bubble.set_panel(self._panel)
 
@@ -104,6 +108,29 @@ class SesameApp:
         self._clipboard.countdown_tick.connect(self._on_clipboard_tick)
         self._clipboard.cleared.connect(self._on_clipboard_cleared)
 
+        # Movement reminder
+        self._movement_reminder = MovementReminder(self._config)
+        self._bubble.set_movement_reminder(self._movement_reminder)
+        self._panel.set_movement_reminder(self._movement_reminder)
+        self._bubble.movement_click.connect(self._on_movement_click)
+        self._panel.movement_badge_clicked.connect(self._on_movement_badge_click)
+        self._movement_reminder.reminder_triggered.connect(self._on_movement_triggered)
+        self._panel.panel_closed.connect(self._on_panel_closed)
+        self._movement_pending = False
+
+        # Activity log — screen-on timestamps + daily movement-confirm counts
+        self._activity_log = ActivityLogger()
+        self._last_resume_ts = 0.0
+
+        # System power events (hibernate/resume) pause/reset the reminder
+        self._power_watcher = _PowerWatcher()
+        self._power_watcher.setFixedSize(0, 0)
+        self._power_watcher.show()
+        self._power_watcher.register_session_notifications()
+        self._power_watcher.suspend_detected.connect(self._movement_reminder.pause)
+        self._power_watcher.resume_detected.connect(self._on_system_resume)
+        self._power_watcher.session_unlocked.connect(self._on_screen_on)
+
         # Apply appearance and default category on startup
         self._panel.apply_appearance(self._config)
         self._apply_default_category()
@@ -115,6 +142,70 @@ class SesameApp:
 
     def _on_clipboard_cleared(self, entry_id: str) -> None:
         self._bubble.clear_countdown()
+
+    def _on_movement_triggered(self) -> None:
+        """Interval elapsed — start blinking the bubble (and badge auto-detects via timer)."""
+        if self._panel.isVisible():
+            self._movement_pending = True
+            return
+        self._start_movement_blink()
+
+    def _on_panel_closed(self) -> None:
+        """Panel just closed — fire any movement reminder that was deferred while it was open."""
+        if self._movement_pending and self._movement_reminder.waiting:
+            self._movement_pending = False
+            self._start_movement_blink()
+
+    def _start_movement_blink(self) -> None:
+        if not self._bubble.isVisible():
+            self._bubble.show()
+        self._bubble.start_waiting_blink()
+
+    def _on_movement_click(self) -> None:
+        """User clicked the blinking bubble — show the confirm dialog, keep blinking."""
+        self._show_movement_confirm()
+
+    def _on_movement_badge_click(self) -> None:
+        """User clicked the movement badge on the panel — show the confirm dialog, keep blinking."""
+        self._show_movement_confirm()
+
+    def _show_movement_confirm(self) -> None:
+        """Show the movement confirmation dialog (shared by bubble click and badge click)."""
+        dlg = MovementConfirmDialog(parent=None)
+        dlg.confirmed.connect(self._on_movement_confirmed)
+        dlg.snoozed.connect(self._on_movement_snoozed)
+        dlg.show()
+        self._movement_dlg = dlg  # keep a reference alive
+
+    def _on_movement_confirmed(self) -> None:
+        """Unified handler: user confirmed they moved (bubble or vault badge)."""
+        self._movement_pending = False
+        self._bubble.stop_waiting_blink()
+        self._panel.stop_badge_blink()
+        self._movement_reminder.reset()
+        self._activity_log.log_move_confirmed()
+
+    def _on_movement_snoozed(self) -> None:
+        """Unified handler: user chose snooze (bubble or vault badge)."""
+        self._movement_pending = False
+        self._bubble.stop_waiting_blink()
+        self._panel.stop_badge_blink()
+        self._movement_reminder.snooze()
+
+    def _on_system_resume(self) -> None:
+        """System resumed from hibernate/sleep — reset the reminder and remember
+        the timestamp so the following session-unlock isn't logged as screen-on."""
+        self._last_resume_ts = time.monotonic()
+        self._movement_reminder.resume()
+
+    def _on_screen_on(self) -> None:
+        """Session unlocked (genuine screen-on) — log it and reset the movement
+        reminder, unless it immediately follows a hibernate/sleep resume
+        (already accounted for separately by _on_system_resume)."""
+        if time.monotonic() - self._last_resume_ts < 10:
+            return
+        self._activity_log.log_screen_on()
+        self._movement_reminder.resume()
 
     def _on_restore(self, btn_center) -> None:
         half = self._bubble.width() // 2
@@ -165,6 +256,7 @@ class SesameApp:
                              panel=self._panel, bubble=self._bubble,
                              export_fn=self.export_vault,
                              import_fn=self.import_vault,
+                             reminder=self._movement_reminder,
                              parent=None)
         dlg.exec()
         self._panel.refresh()
@@ -291,6 +383,74 @@ class SesameApp:
         self._panel.hide()
         self._panel.setWindowOpacity(1.0)
         self._panel.apply_appearance(self._config)
+
+
+# ---------------------------------------------------------------------------
+# Power event watcher — pauses/resumes the movement reminder on hibernate,
+# and detects genuine screen-on (session unlock) events for the activity log
+# ---------------------------------------------------------------------------
+
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QWidget as _QWidget
+
+_WM_POWERBROADCAST      = 0x0218
+_PBT_APMSUSPEND         = 4
+_PBT_APMRESUMEAUTOMATIC = 18
+
+_WM_WTSSESSION_CHANGE   = 0x02B1
+_WTS_SESSION_UNLOCK     = 0x8
+_NOTIFY_FOR_THIS_SESSION = 0
+
+
+class _PowerWatcher(_QWidget):
+    """Hidden widget that listens for Windows power (suspend/resume) events
+    and session unlock (screen-on) events."""
+
+    suspend_detected = Signal()
+    resume_detected  = Signal()
+    session_unlocked = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._wts_registered = False
+
+    def register_session_notifications(self) -> None:
+        """Call after show() so winId() is valid — enables WM_WTSSESSION_CHANGE."""
+        if sys.platform != "win32":
+            return
+        try:
+            hwnd = int(self.winId())
+            wtsapi = ctypes.WinDLL("wtsapi32.dll")
+            if wtsapi.WTSRegisterSessionNotification(hwnd, _NOTIFY_FOR_THIS_SESSION):
+                self._wts_registered = True
+        except Exception:
+            pass
+
+    def nativeEvent(self, eventType, message):
+        if sys.platform == "win32":
+            try:
+                import ctypes.wintypes
+                msg = ctypes.wintypes.MSG.from_address(int(message))
+                if msg.message == _WM_POWERBROADCAST:
+                    if msg.wParam == _PBT_APMSUSPEND:
+                        self.suspend_detected.emit()
+                    elif msg.wParam == _PBT_APMRESUMEAUTOMATIC:
+                        self.resume_detected.emit()
+                elif msg.message == _WM_WTSSESSION_CHANGE:
+                    if msg.wParam == _WTS_SESSION_UNLOCK:
+                        self.session_unlocked.emit()
+            except Exception:
+                pass
+        return False, 0
+
+    def closeEvent(self, event) -> None:
+        if self._wts_registered:
+            try:
+                hwnd = int(self.winId())
+                ctypes.WinDLL("wtsapi32.dll").WTSUnRegisterSessionNotification(hwnd)
+            except Exception:
+                pass
+        super().closeEvent(event)
 
 
 # ---------------------------------------------------------------------------

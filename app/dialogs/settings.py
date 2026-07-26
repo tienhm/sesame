@@ -19,12 +19,14 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QSlider,
+    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 import os
+import sys
 
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 
@@ -45,6 +47,7 @@ class SettingsDialog(QDialog):
         bubble: QWidget | None = None,
         export_fn=None,
         import_fn=None,
+        reminder=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -66,6 +69,7 @@ class SettingsDialog(QDialog):
         self._bubble = bubble
         self._export_fn = export_fn
         self._import_fn = import_fn
+        self._reminder = reminder
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -167,11 +171,43 @@ class SettingsDialog(QDialog):
         self._crop_widget = _ImageCropWidget()
         self._crop_widget.set_image(
             self._config.get("panel_bg_image", ""),
-            float(self._config.get("panel_bg_offset_x", 0.5)),
-            float(self._config.get("panel_bg_offset_y", 0.5)),
+            float(self._config.cache.get("panel_bg_offset_x", 0.5)),
+            float(self._config.cache.get("panel_bg_offset_y", 0.5)),
         )
         self._crop_widget.offset_changed.connect(self._on_crop_offset_changed)
         layout.addWidget(self._crop_widget)
+
+        # Movement reminder
+        move_sep = QFrame(); move_sep.setFrameShape(QFrame.Shape.HLine)
+        layout.addWidget(move_sep)
+
+        move_lbl = QLabel("Movement reminder")
+        move_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(move_lbl)
+
+        move_row = QHBoxLayout()
+        self._move_cb = QCheckBox("Remind me every")
+        self._move_cb.setChecked(bool(self._config.get("movement_reminder_enabled", True)))
+        self._move_spin = QSpinBox()
+        self._move_spin.setRange(5, 120)
+        self._move_spin.setSingleStep(5)
+        self._move_spin.setValue(int(self._config.get("movement_reminder_interval_minutes", 20)))
+        self._move_spin.setSuffix(" min")
+        _res = (os.path.join(sys._MEIPASS, "resources") if getattr(sys, "frozen", False)
+                else os.path.join(os.path.dirname(__file__), "..", "..", "resources"))
+        _up_arrow   = os.path.join(_res, "spin_up.png").replace("\\", "/")
+        _down_arrow = os.path.join(_res, "spin_down.png").replace("\\", "/")
+        self._move_spin.setStyleSheet(
+            f"QSpinBox::up-arrow {{ image: url({_up_arrow}); width: 10px; height: 6px; }}"
+            f"QSpinBox::down-arrow {{ image: url({_down_arrow}); width: 10px; height: 6px; }}"
+        )
+        self._move_spin.setEnabled(self._move_cb.isChecked())
+        self._move_cb.toggled.connect(self._on_move_enabled_toggled)
+        self._move_spin.valueChanged.connect(self._on_move_interval_changed)
+        move_row.addWidget(self._move_cb)
+        move_row.addWidget(self._move_spin)
+        move_row.addStretch()
+        layout.addLayout(move_row)
 
         layout.addStretch()
         return w
@@ -182,6 +218,19 @@ class SettingsDialog(QDialog):
         else:
             disable_startup()
         self._startup_cb.setChecked(is_startup_enabled())
+
+    def _on_move_enabled_toggled(self, checked: bool) -> None:
+        self._move_spin.setEnabled(checked)
+        if self._reminder is not None:
+            self._reminder.set_enabled(checked)
+        else:
+            self._config.set("movement_reminder_enabled", checked)
+
+    def _on_move_interval_changed(self, value: int) -> None:
+        if self._reminder is not None:
+            self._reminder.set_interval(value)
+        else:
+            self._config.set("movement_reminder_interval_minutes", value)
 
     def _on_default_cat_changed(self, text: str) -> None:
         self._config.set("default_category", "" if text == "(none)" else text)
@@ -204,8 +253,8 @@ class SettingsDialog(QDialog):
         )
         if path:
             self._config.set("panel_bg_image", path)
-            self._config.set("panel_bg_offset_x", 0.5)
-            self._config.set("panel_bg_offset_y", 0.5)
+            self._config.cache.set("panel_bg_offset_x", 0.5)
+            self._config.cache.set("panel_bg_offset_y", 0.5)
             self._bg_path_lbl.setText(self._short_path(path))
             self._crop_widget.set_image(path, 0.5, 0.5)
             self._opacity_slider.setEnabled(True)
@@ -219,8 +268,8 @@ class SettingsDialog(QDialog):
         self._apply_panel_appearance()
 
     def _on_crop_offset_changed(self, ox: float, oy: float) -> None:
-        self._config.set("panel_bg_offset_x", ox)
-        self._config.set("panel_bg_offset_y", oy)
+        self._config.cache.set("panel_bg_offset_x", ox)
+        self._config.cache.set("panel_bg_offset_y", oy)
         self._apply_panel_appearance()
 
     def _apply_panel_appearance(self) -> None:

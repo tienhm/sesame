@@ -56,6 +56,12 @@ class TrayIcon(QSystemTrayIcon):
 
         menu.addSeparator()
 
+        settings_action = QAction("⚙  Settings", menu)
+        settings_action.triggered.connect(self._ctrl.open_settings)
+        menu.addAction(settings_action)
+
+        menu.addSeparator()
+
         self._support_action = QAction("❤  Support Sesame", menu)
         self._support_action.triggered.connect(self._ctrl.open_donate)
         menu.addAction(self._support_action)

@@ -13,7 +13,7 @@ import sys
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-_CLEAR_AFTER_MS = 30_000  # 30 seconds
+from app.config import AppConfig
 
 # Windows clipboard format that tells clipboard managers to skip this content
 _CF_EXCLUDE_FORMAT = "ExcludeClipboardContentFromMonitorProcessing"
@@ -92,10 +92,12 @@ class ClipboardManager(QObject):
     countdown_tick = Signal(str, int)
     cleared = Signal(str)
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(self, config: AppConfig | None = None, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self._config = config
+        countdown_interval = int(self._config.get("clipboard_countdown_interval_ms", 1_000)) if config else 1_000
         self._timer = QTimer(self)
-        self._timer.setInterval(1_000)
+        self._timer.setInterval(countdown_interval)
         self._timer.timeout.connect(self._on_tick)
         self._entry_id: str = ""
         self._remaining: int = 0
@@ -115,7 +117,9 @@ class ClipboardManager(QObject):
 
         _set_clipboard_secret(secret)
         self._entry_id = entry_id
-        self._remaining = _CLEAR_AFTER_MS // 1_000
+        clear_after_ms = int(self._config.get("clipboard_clear_after_ms", 30_000)) if self._config else 30_000
+        countdown_interval = int(self._config.get("clipboard_countdown_interval_ms", 1_000)) if self._config else 1_000
+        self._remaining = clear_after_ms // countdown_interval
         self._timer.start()
         self.countdown_tick.emit(self._entry_id, self._remaining)
 

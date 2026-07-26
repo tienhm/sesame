@@ -56,8 +56,6 @@ _COPY_USER = FA.USER
 _EDIT      = FA.PEN
 _COPY_PASS = FA.KEY
 
-_PANEL_WIDTH = 480
-_PANEL_HEIGHT = 430
 _ALL_CATEGORIES = "All categories"
 
 
@@ -206,23 +204,27 @@ class VaultPanel(QWidget):
     sponsor_requested  = Signal()
     quit_requested     = Signal()
     restore_requested  = Signal(QPoint)   # global center of the restore button
+    panel_closed       = Signal()
+    movement_badge_clicked = Signal()     # user clicked the movement countdown badge
 
     def __init__(
         self,
         vault: Vault,
         clipboard: ClipboardManager,
         lock_manager: LockManager,
+        config: AppConfig,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._vault = vault
         self._clipboard = clipboard
         self._lock_mgr = lock_manager
+        self._config = config
         self._selected_category: str = ""        # empty = All categories
         self._selected_tags: set[str] = set()    # empty = no tag filter
         self._row_widgets: dict[str, EntryRowWidget] = {}  # entry_id → widget
         self._drag_pos: QPoint | None = None
-        self._caption_height: int = 34            # px — drag active only in this band
+        self._caption_height: int = int(self._config.get("panel_caption_height", 34))
 
         self._bg_pixmap: QPixmap = QPixmap()
         self._bg_offset_x: float = 0.5
@@ -233,9 +235,9 @@ class VaultPanel(QWidget):
         self._connect_signals()
         self.refresh()
 
-        # Timer to refresh OTP codes every 5 s
+        # Timer to refresh OTP codes
         self._otp_timer = QTimer(self)
-        self._otp_timer.setInterval(1_000)
+        self._otp_timer.setInterval(int(self._config.get("otp_refresh_interval_ms", 1_000)))
         self._otp_timer.timeout.connect(self._update_otp_buttons)
         self._otp_timer.start()
 
@@ -251,7 +253,9 @@ class VaultPanel(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setObjectName("VaultPanel")
-        self.setFixedSize(_PANEL_WIDTH, _PANEL_HEIGHT)
+        panel_width = int(self._config.get("panel_width", 480))
+        panel_height = int(self._config.get("panel_height", 430))
+        self.setFixedSize(panel_width, panel_height)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -275,6 +279,22 @@ class VaultPanel(QWidget):
         title_lbl = QLabel(_caption)
         title_lbl.setObjectName("CaptionTitle")
         caption.addWidget(title_lbl, stretch=1)
+
+        # Movement countdown badge (left of restore button)
+        badge_width = int(self._config.get("movement_badge_width", 60))
+        badge_height = int(self._config.get("movement_badge_height", 24))
+        self._movement_badge = QPushButton("")
+        self._movement_badge.setObjectName("MovementBadge")
+        self._movement_badge.setMinimumWidth(badge_width)
+        self._movement_badge.setFixedHeight(badge_height)
+        self._movement_badge.setStyleSheet(
+            "QPushButton { font-size: 11px; font-weight: bold; "
+            "border-radius: 6px; padding: 0 2px; }"
+        )
+        self._movement_badge.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._movement_badge.setToolTip("Movement reminder countdown")
+        self._movement_badge.setVisible(False)
+        caption.addWidget(self._movement_badge)
 
         self._restore_btn = QPushButton(FA.CIRCLE_DOT)
         self._restore_btn.setObjectName("ToolbarIcon")
@@ -390,6 +410,7 @@ class VaultPanel(QWidget):
         self._settings_btn.clicked.connect(self.settings_requested)
         self._restore_btn.clicked.connect(self._on_restore_clicked)
         self._close_btn.clicked.connect(self.hide)
+        self._movement_badge.clicked.connect(self._on_movement_badge_clicked)
 
         self._clipboard.countdown_tick.connect(self._on_countdown_tick)
         self._clipboard.cleared.connect(self._on_clipboard_cleared)
@@ -436,8 +457,87 @@ class VaultPanel(QWidget):
             lw.viewport().setStyleSheet(vp_style)
 
     # ------------------------------------------------------------------
+    # Movement badge
+    # ------------------------------------------------------------------
+
+    def set_movement_reminder(self, reminder) -> None:
+        """Attach the MovementReminder so the badge can show its countdown."""
+        self._movement_reminder = reminder
+        # Timer to refresh the badge text
+        self._badge_timer = QTimer(self)
+        self._badge_timer.setInterval(int(self._config.get("movement_badge_timer_interval_ms", 1_000)))
+        self._badge_timer.timeout.connect(self._update_movement_badge)
+        self._badge_timer.start()
+        # Blink timer for when the reminder is waiting
+        self._badge_blink_timer = QTimer(self)
+        self._badge_blink_timer.setInterval(int(self._config.get("movement_badge_blink_interval_ms", 800)))
+        self._badge_blink_timer.timeout.connect(self._do_badge_blink)
+        self._badge_blink_phase = 0
+
+    def _update_movement_badge(self) -> None:
+        reminder = getattr(self, "_movement_reminder", None)
+        if reminder is None or not reminder.enabled:
+            self._movement_badge.setVisible(False)
+            return
+        if reminder.waiting:
+            # Blinking state — start blink timer if not already running
+            self._movement_badge.setVisible(True)
+            self._movement_badge.setText("Move!")
+            if not self._badge_blink_timer.isActive():
+                self._badge_blink_phase = 0
+                self._badge_blink_timer.start()
+            return
+        # Stop blink if it was running
+        if self._badge_blink_timer.isActive():
+            self._badge_blink_timer.stop()
+            self._movement_badge.setStyleSheet(
+                "QPushButton { font-size: 11px; font-weight: bold; "
+                "border-radius: 6px; padding: 0 2px; }"
+            )
+        remaining = reminder.remaining_seconds()
+        if remaining <= 0:
+            self._movement_badge.setVisible(False)
+            return
+        minutes, seconds = divmod(remaining, 60)
+        self._movement_badge.setText(f"{minutes}:{seconds:02d}")
+        self._movement_badge.setVisible(True)
+
+    def _do_badge_blink(self) -> None:
+        self._badge_blink_phase ^= 1
+        if self._badge_blink_phase:
+            self._movement_badge.setStyleSheet(
+                "QPushButton { background-color: #ff8800; color: #fff; "
+                "border-radius: 6px; border: 2px solid #ff6600; "
+                "font-weight: bold; font-size: 11px; padding: 0 2px; }"
+            )
+        else:
+            self._movement_badge.setStyleSheet(
+                "QPushButton { font-size: 11px; font-weight: bold; "
+                "border-radius: 6px; padding: 0 2px; }"
+            )
+
+    def _on_movement_badge_clicked(self) -> None:
+        """User clicked the badge — only respond when the reminder has timed out."""
+        reminder = getattr(self, "_movement_reminder", None)
+        if reminder and reminder.waiting:
+            self.movement_badge_clicked.emit()
+
+    def stop_badge_blink(self) -> None:
+        """Stop blinking and reset badge style (called after confirm/snooze)."""
+        if hasattr(self, "_badge_blink_timer"):
+            self._badge_blink_timer.stop()
+        self._movement_badge.setStyleSheet(
+            "QPushButton { font-size: 11px; font-weight: bold; "
+            "border-radius: 6px; padding: 0 2px; }"
+        )
+
+    # ------------------------------------------------------------------
     # Caption drag
     # ------------------------------------------------------------------
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.panel_closed.emit()
 
     def mousePressEvent(self, event) -> None:
         if (event.button() == Qt.MouseButton.LeftButton
@@ -456,8 +556,8 @@ class VaultPanel(QWidget):
     def apply_appearance(self, config: AppConfig) -> None:
         bg_path = config.get("panel_bg_image", "")
         self._bg_pixmap = QPixmap(bg_path) if bg_path and os.path.exists(bg_path) else QPixmap()
-        self._bg_offset_x = float(config.get("panel_bg_offset_x", 0.5))
-        self._bg_offset_y = float(config.get("panel_bg_offset_y", 0.5))
+        self._bg_offset_x = float(config.cache.get("panel_bg_offset_x", 0.5))
+        self._bg_offset_y = float(config.cache.get("panel_bg_offset_y", 0.5))
         comp_opacity = float(config.get("panel_component_opacity", 1.0))
         self._apply_component_opacity(comp_opacity)
         self.repaint()
@@ -705,8 +805,8 @@ class VaultPanel(QWidget):
             widget._otp_lbl.setText(f"{spaced}  {remaining}s")
             if widget._otp_btn:
                 widget._otp_btn.setToolTip(f"OTP: {code} — {remaining}s remaining\nClick to copy")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("OTP refresh failed: %s", e)
 
     def _on_url_open_requested(self, entry_id: str) -> None:
         entry = next((e for e in self._vault.entries if e.id == entry_id), None)
@@ -723,7 +823,8 @@ class VaultPanel(QWidget):
         if not self._ensure_unlocked(entry):
             return
         secret = self._vault.get_secret(entry_id) or ""
-        auto_login.send_credentials(entry.username, secret)
+        inter_key_delay = float(self._config.get("auto_login_inter_key_delay_s", 0.012))
+        auto_login.send_credentials(entry.username, secret, inter_key_delay)
 
     def _ensure_unlocked(self, entry: Entry) -> bool:
         if not self._lock_mgr.is_locked(entry.category):

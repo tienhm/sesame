@@ -28,7 +28,6 @@ _VK_TAB = 0x09
 _INPUT_KEYBOARD = 1
 _KEYEVENTF_UNICODE = 0x0004
 _KEYEVENTF_KEYUP = 0x0002
-_INTER_KEY_DELAY_S = 0.012  # small gap so JS-heavy forms register each keystroke
 
 # ctypes Structure/Union definitions are plain Python — safe to build on any
 # platform. Only calling into ctypes.windll (below) is Windows-only.
@@ -64,19 +63,19 @@ def _key_event(vk: int = 0, scan: int = 0, flags: int = 0) -> _INPUT:
     return _INPUT(type=_INPUT_KEYBOARD, ii=_INPUT_UNION(ki=_KEYBDINPUT(vk, scan, flags, 0, extra)))
 
 
-def _send_tab() -> None:
+def _send_tab(inter_key_delay: float) -> None:
     _send_input([_key_event(vk=_VK_TAB), _key_event(vk=_VK_TAB, flags=_KEYEVENTF_KEYUP)])
-    time.sleep(_INTER_KEY_DELAY_S)
+    time.sleep(inter_key_delay)
 
 
-def _type_text(text: str) -> None:
+def _type_text(text: str, inter_key_delay: float) -> None:
     for ch in text:
         code = ord(ch)
         _send_input([
             _key_event(scan=code, flags=_KEYEVENTF_UNICODE),
             _key_event(scan=code, flags=_KEYEVENTF_UNICODE | _KEYEVENTF_KEYUP),
         ])
-        time.sleep(_INTER_KEY_DELAY_S)
+        time.sleep(inter_key_delay)
 
 
 def _ensure_foreground() -> None:
@@ -88,14 +87,14 @@ def _ensure_foreground() -> None:
         ctypes.windll.user32.SetForegroundWindow(hwnd)
 
 
-def send_credentials(username: str, secret: str) -> None:
+def send_credentials(username: str, secret: str, inter_key_delay: float) -> None:
     if sys.platform != "win32":
         logger.debug("send_credentials: not on Windows, skipping.")
         return
 
     _ensure_foreground()
     if username:
-        _type_text(username)
-        _send_tab()
+        _type_text(username, inter_key_delay)
+        _send_tab(inter_key_delay)
     if secret:
-        _type_text(secret)
+        _type_text(secret, inter_key_delay)

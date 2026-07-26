@@ -1,4 +1,4 @@
-# Sesame  `v1.3`
+# Sesame
 
 > **Se**crets **Sa**fe **Me**moriser
 
@@ -8,165 +8,34 @@ No administrator privileges required. Suitable for standard corporate user accou
 
 ---
 
+## Download & Run
+
+1. Download the latest `Sesame-*.exe` from `dist/` (or from GitHub Releases).
+2. Double-click the file — no installation is needed.
+3. The floating bubble appears in the bottom-right corner.
+
+To run or build from source, see [`DEV_GUIDE.md`](DEV_GUIDE.md).
+
+---
+
 ## Features
 
 - **Floating bubble** — small always-on-top button, draggable to any screen position, remembers position between sessions
-- **Vault panel** — title bar with ⊙ restore and ✕ close; draggable by the caption; real-time search, category filter, and tag filter
-- **Tags** — attach multiple comma-separated tags to each entry; filter by one or more tags (AND logic) using the left panel
-- **URL** — optional per entry; a small link icon appears inline with the name and opens the default browser
-- **Auto-login** — set a delay (ms) per entry; after opening the URL Sesame injects `username → TAB → password` as keystrokes (Windows only)
-- **OTP / TOTP** — store a base32 TOTP secret per entry; the live 6-digit code is displayed in the entry row and updates every second; click the clock button to copy; import from Google Authenticator QR codes or migration URIs via **Settings → Data**
-- **Copy to clipboard** — 👤 username (flash feedback), 🔑 password (30 s auto-clear countdown); neither stored in Windows Clipboard History (Win+V); countdown mirrors on the bubble when panel is closed
-- **In-row edit** — ✏️ button on each entry; existing secret and OTP pre-loaded
-- **Password generator** — 🎲 button; configurable length, character sets; options remembered between opens; cryptographically secure (`secrets.choice`)
-- **Drag-to-reorder entries** — drag any row up or down; order saved immediately
-- **Single instance** — second launch flashes the bubble at screen centre; *Locate Sesame* in the tray does the same
-- **Categories** — organize entries; rename or delete via Settings
-- **Default category** — pre-selected on startup (Settings → General)
-- **Background image** — custom photo as panel background; drag viewport to choose region; component opacity slider
-- **Settings** — General, Categories, Security, Data (export / import / OTP import) tabs
-- **Master password** — one shared password protects selected categories; prompted once per session
-- **Start with Windows** — enabled by default; no admin required
-- **Secure storage** — passwords and OTP secrets in Windows Credential Manager (DPAPI-encrypted); metadata in `%APPDATA%\Sesame\sesame_vault.json`
-- **Export / Import** — AES-256-GCM encrypted `.sesame` files including OTP secrets; PBKDF2-HMAC-SHA256 (600 000 iterations)
+- **Vault panel** — real-time search, category filter, and tag filter
+- **Tags** — attach multiple comma-separated tags to each entry; filter by one or more tags (AND logic)
+- **URL** — optional per entry; a small link icon opens the default browser
+- **Auto-login** — set a delay per entry; after opening the URL, Sesame injects `username → TAB → password` as keystrokes (Windows only)
+- **OTP / TOTP** — store a base32 TOTP secret per entry; live 6-digit code shown in the entry row, updated every second
+- **Movement reminder** — configurable idle timer blinks the bubble orange to remind you to move; click to confirm or snooze
+- **Copy to clipboard** — copy username or password; passwords auto-clear after 30 seconds and are excluded from Windows Clipboard History (Win+V)
+- **Password generator** — configurable length and character sets, cryptographically secure
+- **Master password** — protect selected categories; prompted once per session
+- **Start with Windows** — enabled by default, no admin required
+- **Export / Import** — backup and restore your vault with AES-256-GCM encrypted `.sesame` files
 
 ---
 
-## Requirements
-
-- Windows 10 / 11
-- Python 3.11+ (for running from source)
-
----
-
-## Installation
-
-### Option A — Run from source
-
-```powershell
-# 1. Clone the repository
-git clone <repo-url>
-cd sesame
-
-# 2. Create and activate a virtual environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Run
-python main.py
-```
-
-### Option B — Build a standalone executable
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pyinstaller sesame.spec
-```
-
-The output is `dist/Sesame.exe` — a single file, no installation needed, no admin rights required.
-
----
-
-## Project Structure
-
-```
-sesame/
-├── main.py                  # Application entry point and controller
-├── app/
-│   ├── config.py            # User preferences → %APPDATA%\Sesame\config.json
-│   ├── bubble.py            # Floating always-on-top draggable button
-│   ├── vault_panel.py       # Main panel: search, tag filter, entry list
-│   ├── tray.py              # System tray icon and context menu
-│   ├── dialogs/
-│   │   ├── add_entry.py     # Add / Edit entry dialog
-│   │   ├── export_import.py # Export / Import vault dialogs
-│   │   └── settings.py      # Settings dialog (General, Categories, Security)
-│   ├── models/
-│   │   ├── entry.py         # Entry dataclass (id, name, username, url, tags, category)
-│   │   └── vault.py         # CRUD operations via Windows Credential Manager
-│   └── utils/
-│       ├── clipboard.py     # Copy to clipboard + auto-clear after 30 s (Win32, Win+V excluded)
-│       ├── credential_store.py  # Direct win32cred access for secrets and OTP secrets
-│       ├── icons.py         # Font Awesome 6 icon codepoints
-│       ├── lock_manager.py  # Master password lock per category
-│       ├── otp_import.py    # Parse otpauth:// and Google Authenticator migration URIs (returns list[str] | None for QR scan)
-│       ├── startup.py       # Windows startup registry helper
-│       └── vault_io.py      # AES-256-GCM encrypt/decrypt for export files
-├── resources/
-│   ├── icon.png
-│   └── style.qss            # Dark theme stylesheet
-├── requirements.txt
-└── sesame.spec              # PyInstaller build spec
-```
-
----
-
-## How it works
-
-### Storage
-
-Secrets are never written to disk in plaintext.
-
-| What | Where |
-|---|---|
-| Entry metadata (name, username, url, tags, has_otp…) | `%APPDATA%\Sesame\sesame_vault.json` — plain JSON, no secrets |
-| Password + OTP secret | Windows Credential Manager — `SZM:<entry-id>`, blob = `{"p":"…","o":"…"}` |
-| UI preferences (bubble position, default category, master password hash) | `%APPDATA%\Sesame\config.json` — no secrets here |
-
-`entry-id` is a short, reused-gap integer assigned locally by the vault (not a global UUID), keeping each Credential Manager entry compact. `UserName` is left empty — the actual account username is stored in `sesame_vault.json`, not duplicated into Credential Manager. Secrets from older versions are migrated to this layout automatically the first time they're read.
-
-Windows DPAPI encrypts all Credential Manager entries automatically. The data is tied to the current Windows user account and machine.
-
-### Tags & filtering
-
-Each entry can have multiple tags (comma-separated in the edit dialog). The left panel shows:
-- A **category combo box** at the top — filters the tag list and entry list by category
-- A **tag list** below — shows only tags present in the selected category; supports multi-select
-
-Selecting multiple tags applies **AND logic** — only entries that contain all selected tags are shown. The search bar also matches against tag names.
-
-### Master password
-
-One shared master password can protect any number of categories. Protected categories require the password once per session before copying is allowed. The password is stored as a salted PBKDF2-HMAC-SHA256 hash in `config.json` — the plaintext is never saved.
-
-Configure in **Settings → Security**:
-- **Set / Change…** — set a new master password (requires current password if one already exists)
-- **Remove…** — remove the master password (requires current password)
-- Checkboxes — enable or disable protection per category (only available once a master password is set)
-
-### Export / Import
-
-The vault can be exported to a portable `.sesame` file for backup or migration to another machine.
-
-- **Export** — tray menu → *Export Vault…* — enter a password (confirmed), choose a save location. All entries and their secrets are serialised to JSON, encrypted with **AES-256-GCM**, and written to the file. The encryption key is derived from your password using **PBKDF2-HMAC-SHA256** (600 000 iterations, random 16-byte salt).
-- **Import** — tray menu → *Import Vault…* — select the `.sesame` file, enter the password. Entries are added to the current vault. Incorrect passwords are rejected with an error message; the file is never modified.
-
-The `.sesame` file is safe to copy or email — it is unreadable without the correct password.
-
-### Start with Windows
-
-Uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — a user-level registry key that does not require administrator privileges.
-
-The entry is created automatically on first launch. It can be toggled in **Settings → General**.
-
-### Clipboard auto-clear
-
-When you click 🔑 on an entry:
-
-1. The secret is placed on the clipboard, **excluded from Windows Clipboard History** (Win+V).
-2. A 30-second countdown appears on the button — and on the bubble if the panel is closed.
-3. After 30 seconds the clipboard is cleared automatically.
-
-Clicking 👤 copies the username (also excluded from Win+V) — a brief ✓ flash confirms the copy.
-
----
-
-## Usage
+## Quick Start
 
 ### First launch
 
@@ -176,88 +45,141 @@ Clicking 👤 copies the username (also excluded from Win+V) — a brief ✓ fla
 
 ### Adding an entry
 
-Fill in **Name** (required), **Username** (optional), **Secret** (required), **URL** (optional), **Tags** (optional, comma-separated), and select or type a **Category**. Click **Save**.
+Fill in **Name** (required), **Username** (optional), **Secret** (required), **URL** (optional), **Tags** (optional, comma-separated), and select a **Category**. Click **Save**.
 
 Use the **👁** button to reveal/hide the secret, and **🎲** to open the password generator.
 
-### Password generator
+### Copy a password
 
-Click **🎲** next to the secret field to open the generator:
-- Set the desired **length** (4–64 characters)
-- Choose character sets: **Letters**, **Digits**, **Special characters**
-- The password updates live as you adjust options
-- Click **↻** to generate a new one with the same settings
-- **Use this password** applies it; **Cancel** discards
-
-Options are remembered for the session.
-
-### Entry row buttons
-
-| Button | Action |
-|---|---|
-| 👤 | Copy username to clipboard (no auto-clear, brief ✓ feedback) |
-| 🔑 | Copy password/secret to clipboard (30 s auto-clear countdown) |
-| ✏️ | Open edit dialog (existing secret pre-loaded) |
+Click the **🔑** button on an entry. The password is copied to the clipboard and will clear automatically after 30 seconds. The countdown is also shown on the bubble if the panel is closed.
 
 ### Tag filtering
 
-1. Select a category from the combo box — the tag list updates to show only relevant tags.
-2. Click one or more tags to filter entries — multiple tags use AND logic.
+1. Select a category from the combo box.
+2. Click one or more tags to filter entries (AND logic).
 3. Click a selected tag again to deselect it.
 
-### Moving the bubble
+### Movement reminder
 
-Click and drag the bubble to any position on screen. The position is saved automatically.
-
-### Panel caption bar
-
-The panel has a title bar at the top with two buttons on the right:
-
-| Button | Action |
-|---|---|
-| ⊙ | Restore to bubble mode — hides panel, shows bubble at the button's position |
-| ✕ | Close panel — panel hides, bubble stays hidden, app runs in tray |
-
-Drag the title bar to reposition the panel. The ⊙ and ✕ buttons in the toolbar (bottom right) also provide quick access.
-
-### Background image
-
-In **Settings → General**:
-1. Click **Browse…** to select a photo (PNG, JPG, BMP, WebP).
-2. Drag the blue viewport rectangle to choose which region of the image is displayed in the panel.
-3. Use the **Components opacity** slider to make the UI elements (search bar, lists, buttons) semi-transparent so the image shows through.
-4. Click **Clear** to remove the background.
+Enable it in **Settings → General** and choose an interval (5–120 minutes, default 20). When the timer expires, the bubble blinks orange and, after a short delay, starts roaming across the screen. Click the bubble to confirm or snooze for 5 minutes.
 
 ### System tray
 
-Right-click the tray icon for quick access to:
-
-| Item | Action |
-|---|---|
-| Show Bubble / Hide Bubble | Toggle the floating bubble (disabled while panel is open) |
-| Locate Sesame | Flash the bubble at screen centre |
-| ❤ Support Sesame | Open the sponsor page |
-| Exit Sesame | Quit the app |
+Right-click the tray icon to show/hide the bubble, open Settings, locate Sesame, or exit.
 
 ---
 
-## Dependencies
+## Security
 
-| Package | Purpose |
-|---|---|
-| `PySide6` | Qt6 UI framework (LGPL) |
-| `keyring` | Vault-index migration only (secrets use `pywin32` directly, see Storage) |
-| `pywin32` | Direct Windows Credential Manager access for secrets (Windows only) |
-| `cryptography` | AES-256-GCM encryption for vault export; PBKDF2 for master password |
-| `pillow` | PNG → ICO conversion for PyInstaller (build only) |
-| `pyinstaller` | Package to standalone `.exe` (build only) |
+- **Storage** — passwords and OTP secrets are stored in Windows Credential Manager (DPAPI-encrypted). Entry metadata is stored in `%APPDATA%\Sesame\sesame_vault.json` (no secrets).
+- **Clipboard** — copied secrets are excluded from Windows Clipboard History (Win+V) and auto-clear after 30 seconds.
+- **Master password** — stored as a salted PBKDF2-HMAC-SHA256 hash in `%APPDATA%\Sesame\config.json`.
+- **Export** — `.sesame` files are encrypted with AES-256-GCM; the key is derived from your password with PBKDF2-HMAC-SHA256 (600 000 iterations).
 
 ---
 
-## Corporate environment notes
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| Bubble does not appear | Right-click the tray icon and choose **Show Bubble**, or restart the app. |
+| SmartScreen warning | Click **More info** → **Run anyway**. |
+| Clipboard not clearing | Make sure no other app is actively using the clipboard. |
+| Forgot master password | Remove it in **Settings → Security** (requires the current password). All category locks will be cleared. |
+
+---
+
+## Corporate / Locked-down Environment
 
 - No administrator privileges required at any point.
 - No files written outside `%APPDATA%\Sesame\` and Windows Credential Manager.
 - No network access. All data stays on the local machine.
-- The `.exe` produced by PyInstaller is fully self-contained — no Python installation required on the target machine.
-- The app does not appear in the taskbar (uses `Qt::Tool` window flag).
+- The executable is self-contained — no Python installation required.
+
+---
+
+## Configuration
+
+### Startup
+- **Settings → General → Start with Windows** toggles whether Sesame launches at login. It uses a user-level registry key, so no admin rights are required.
+
+### Movement Reminder
+- **Settings → General → Remind me every X min** enables the idle timer (5–120 min, default 20).
+- When the timer expires, the bubble blinks orange.
+- If you do not click it, the bubble starts roaming across the screen after a short delay.
+- Click the bubble to open the dialog:
+  - **✓ I moved!** resets the timer.
+  - **Remind me in 5 min** snoozes for 5 minutes.
+- The reminder pauses and resets automatically when the system hibernates or sleeps.
+
+### Master Password
+- **Settings → Security → Set / Change…** creates or updates the master password.
+- **Settings → Security → Remove…** removes it (requires current password).
+- Checkboxes enable protection per category. Protected categories require the password once per session before copying is allowed.
+
+### Background Image
+1. **Settings → General → Browse…** select a PNG/JPG image.
+2. Drag the blue viewport rectangle to choose which region is shown.
+3. Use the **Components opacity** slider to make UI elements semi-transparent.
+4. Click **Clear** to remove the background.
+
+---
+
+## Tray Icon Commands
+
+Right-click the tray icon for quick access:
+
+| Command | Description |
+|---|---|
+| Show Bubble / Hide Bubble | Toggle the floating bubble (disabled while panel is open) |
+| Locate Sesame | Flash the bubble at screen centre |
+| Settings | Open the Settings dialog |
+| ❤ Support Sesame | Open the sponsor page |
+| Exit Sesame | Quit the application |
+
+---
+
+## Export / Import
+
+### Export Vault
+1. **Settings → Data → Export Vault…**
+2. Enter an encryption password and confirm it.
+3. Choose a save location.
+4. A `.sesame` file is created — it is safe to copy or back up.
+
+### Import Vault
+1. **Settings → Data → Import Vault…**
+2. Select the `.sesame` file.
+3. Enter the password.
+4. Entries are added to the current vault. The original file is never modified.
+
+---
+
+## System Requirements
+
+### Minimum
+- Windows 10 or later
+- 64-bit architecture
+- 256 MB RAM
+- 200 MB disk space
+
+### Recommended
+- Windows 11
+- 512 MB+ RAM
+- 300 MB disk space
+
+---
+
+## Notes
+
+- **First run** may be slow (Windows caching). Subsequent runs are faster.
+- **Windows SmartScreen** may show a warning; click **More info** → **Run anyway**.
+- **Updates** require rebuilding the executable after code changes.
+- **Backup** your vault periodically by exporting it.
+- **Antivirus false positive** — Some engines may flag `Sesame-*.exe` because of PyInstaller. The source is open; build from source if in doubt.
+
+---
+
+## More Information
+
+- [Developer Guide](DEV_GUIDE.md) — build from source, virtual environment, project structure, architecture, build/packaging, and security

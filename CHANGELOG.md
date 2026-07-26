@@ -1,5 +1,39 @@
 # Changelog
 
+## v1.4 — 2026-07-26
+
+### Added
+- **Movement reminder** — configurable idle timer (5–120 min, default 20) blinks the bubble orange when it's time to move; clicking it shows a dialog with a random motivational quote and "✓ I moved!" / "Remind me in 5 min" choices; paused/reset automatically on system hibernate/resume
+- **Roaming bubble** — if the user doesn't interact with the blinking bubble, it starts roaming across the screen after a configurable delay to grab attention
+- Settings → General → new "Movement reminder" section (enable checkbox + interval spinbox)
+- **Settings** added to the system tray context menu
+
+### Changed
+- **Configuration centralization** — all UI sizing and timing constants (bubble size, drag threshold, panel size, caption height, movement badge size/intervals, clipboard timeout, countdown interval, auto-login inter-key delay, movement reminder default/snooze minutes, roaming delay/interval, OTP refresh interval, etc.) have been moved from hardcoded module constants into `_PROTECTED_CONFIG` in `app/config.py`
+- Application code now reads these values from `AppConfig`, so user settings are preserved and protected even when `config.json` is overwritten
+
+### Fixed
+- **Standalone `.exe` build was missing `resources/` folder** (Font Awesome font, `style.qss`, `icon.png`) — PyInstaller spec had `datas=[]`, so the packaged exe showed missing icon glyphs (bubble/tray/buttons), no transparent background, and an unstyled UI. Fixed by adding all resource files to the `datas=` list in `sesame.spec`; PyInstaller automatically adjusts `__file__` inside the bundle so existing `os.path.dirname(__file__)` calls resolve correctly.
+- **OTP codes stuck showing `● ● ●` (dots) in the packaged `.exe`** — `pyotp` and `win32timezone` (a `pywintypes`/`win32cred` runtime dependency used by Credential Manager access) are imported dynamically at call-time and were missed by PyInstaller's static analysis. Added both as `hiddenimports` in `sesame.spec`.
+- **Output executable name** is now versioned as `dist/Sesame-v1.4.exe` from `sesame.spec`.
+
+## v1.3 — 2026-07-20
+
+### Added
+- **TOTP / OTP support** — store a base32 TOTP secret per entry; live 6-digit code shown in the entry row, updated every second; click the clock button to copy
+- Import OTP secrets from Google Authenticator (`otpauth://` / `otpauth-migration://` URI, or QR image via `pyzbar`) in **Settings → Data**
+- **Auto-login (Windows)** — configurable delay per entry; injects `username → TAB → password` keystrokes after opening the URL
+- URL shown as inline link icon next to entry name instead of a separate line
+
+### Changed
+- Passwords and OTP secrets now share a single Windows Credential Manager entry per vault item (`{"p": "…", "o": "…"}`), halving credential count vs v1.2
+- Export/Import now includes OTP secrets in the encrypted `.sesame` file
+- Focus border on inputs changed to white (`#e8eaed`)
+- Scrollbar always reserves space so buttons are never hidden underneath it
+
+### Fixed
+- Removed pre-v1.2 migration code; fixed vault-wipe bug triggered when a single entry failed to parse
+
 ## v1.2 — 2026-07-17
 
 ### Added

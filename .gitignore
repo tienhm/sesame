@@ -24,7 +24,8 @@ resources/
 Thumbs.db
 
 # Private
-LOCAL.md
+local/
 
 # Build temp
 *.tmp.*
+*.log
