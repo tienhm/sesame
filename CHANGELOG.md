@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.5 — 2026-07-30
+
+### Added
+- **Bitwarden import** — import from an unencrypted Bitwarden JSON export (Settings → Data → Import → Bitwarden tab); only login items are imported; folders become categories; TOTP secrets are preserved; deduplication by URL + username + password skips entries already in the vault
+- **Tray menu: Movement Reminder toggle** — enable or disable the movement reminder directly from the system tray without opening Settings
+- **Import section redesigned as tabs** — Settings → Data → Import now has three tabs: **Vault** (`.sesame`), **OTP**, **Bitwarden**
+
+### Changed
+- **URL normalization** — `http://`/`https://` is stripped when saving an entry; `https://` is re-added automatically when opening the URL in the browser or showing the tooltip; the URL field placeholder now reads `e.g. github.com`
+
+### Fixed
+- **Hibernate while blinking** — when the movement reminder was actively blinking and the machine hibernated, the bubble kept blinking after resume even though the countdown had reset; blink and countdown now reset together
+- **Auto-start with versioned filename** — `ensure_startup_enabled()` previously checked only whether the registry key existed, not whether the stored path matched the current executable; upgrading from `Sesame-v1.4.exe` to `Sesame-v1.5.exe` left the old path registered and autostart silently stopped working; now re-registers whenever the path changes
+- **Checkbox checkmark invisible** — custom QSS overrode the checkbox indicator colour but provided no checkmark image; added `check.svg` and patched the stylesheet loader to resolve resource paths correctly in both dev and PyInstaller modes
+
 ## v1.4 — 2026-07-26
 
 ### Added

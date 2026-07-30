@@ -50,10 +50,25 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _load_stylesheet(app: QApplication) -> None:
-    qss_path = os.path.join(os.path.dirname(__file__), "resources", "style.qss")
+    import re
+    if getattr(sys, "frozen", False):
+        res_dir = os.path.join(sys._MEIPASS, "resources")
+    else:
+        res_dir = os.path.join(os.path.dirname(__file__), "resources")
+    qss_path = os.path.join(res_dir, "style.qss")
     if os.path.exists(qss_path):
         with open(qss_path, encoding="utf-8") as fh:
-            app.setStyleSheet(fh.read())
+            qss = fh.read()
+        # Rewrite relative resource paths to quoted absolute paths so images
+        # resolve correctly in development and when frozen by PyInstaller.
+        # Quoting handles paths that contain spaces.
+        abs_res = res_dir.replace("\\", "/")
+        qss = re.sub(
+            r"url\(resources/([^)]*)\)",
+            lambda m: f"url('{abs_res}/{m.group(1)}')",
+            qss,
+        )
+        app.setStyleSheet(qss)
 
 
 def _make_icon() -> QIcon:
@@ -192,10 +207,17 @@ class SesameApp:
         self._panel.stop_badge_blink()
         self._movement_reminder.snooze()
 
+    def _stop_movement_blink(self) -> None:
+        """Cancel any in-progress movement reminder blink (bubble + badge)."""
+        self._movement_pending = False
+        self._bubble.stop_waiting_blink()
+        self._panel.stop_badge_blink()
+
     def _on_system_resume(self) -> None:
         """System resumed from hibernate/sleep — reset the reminder and remember
         the timestamp so the following session-unlock isn't logged as screen-on."""
         self._last_resume_ts = time.monotonic()
+        self._stop_movement_blink()
         self._movement_reminder.resume()
 
     def _on_screen_on(self) -> None:
@@ -205,6 +227,7 @@ class SesameApp:
         if time.monotonic() - self._last_resume_ts < 10:
             return
         self._activity_log.log_screen_on()
+        self._stop_movement_blink()
         self._movement_reminder.resume()
 
     def _on_restore(self, btn_center) -> None:
@@ -230,6 +253,12 @@ class SesameApp:
             self._panel.hide()
         else:
             self._bubble.show()
+
+    def toggle_movement_reminder(self) -> None:
+        enabled = not self._movement_reminder.enabled
+        self._movement_reminder.set_enabled(enabled)
+        if not enabled:
+            self._stop_movement_blink()
 
     def open_add_entry(self) -> None:
         dlg = AddEditEntryDialog(self._vault, parent=None)

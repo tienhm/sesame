@@ -19,6 +19,13 @@ Click "All" → clear filter.
 
 from __future__ import annotations
 
+
+def _url_with_https(url: str) -> str:
+    """Return url with https:// prepended if it has no protocol."""
+    if url and "://" not in url:
+        return "https://" + url
+    return url
+
 import logging
 import os
 
@@ -98,7 +105,7 @@ class EntryRowWidget(QWidget):
             link_btn.setObjectName("LinkButton")
             link_btn.setFixedSize(16, 16)
             link_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-            link_btn.setToolTip(entry.url)
+            link_btn.setToolTip(_url_with_https(entry.url))
             link_btn.clicked.connect(lambda: self.url_open_requested.emit(self.entry_id))
             name_row.addWidget(link_btn)
 
@@ -812,7 +819,7 @@ class VaultPanel(QWidget):
         entry = next((e for e in self._vault.entries if e.id == entry_id), None)
         if not entry or not entry.url:
             return
-        QDesktopServices.openUrl(QUrl(entry.url))
+        QDesktopServices.openUrl(QUrl(_url_with_https(entry.url)))
         if entry.auto_login_ms > 0:
             QTimer.singleShot(entry.auto_login_ms, lambda: self._do_auto_login(entry_id))
 

@@ -77,6 +77,7 @@ a = Analysis(
         ("resources/fa-solid-900.ttf", "resources"),
         ("resources/spin_up.png", "resources"),
         ("resources/spin_down.png", "resources"),
+        ("resources/check.svg", "resources"),
     ],
     hiddenimports=[
         "keyring.backends.Windows",

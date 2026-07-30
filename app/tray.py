@@ -56,6 +56,13 @@ class TrayIcon(QSystemTrayIcon):
 
         menu.addSeparator()
 
+        self._movement_action = QAction("Movement Reminder", menu)
+        self._movement_action.setCheckable(True)
+        self._movement_action.triggered.connect(self._ctrl.toggle_movement_reminder)
+        menu.addAction(self._movement_action)
+
+        menu.addSeparator()
+
         settings_action = QAction("⚙  Settings", menu)
         settings_action.triggered.connect(self._ctrl.open_settings)
         menu.addAction(settings_action)
@@ -77,14 +84,17 @@ class TrayIcon(QSystemTrayIcon):
     # ------------------------------------------------------------------
 
     def _update_show_action(self) -> None:
-        bubble = getattr(self._ctrl, '_bubble', None)
-        panel  = getattr(self._ctrl, '_panel',  None)
+        bubble   = getattr(self._ctrl, '_bubble', None)
+        panel    = getattr(self._ctrl, '_panel',  None)
+        reminder = getattr(self._ctrl, '_movement_reminder', None)
         panel_visible = panel is not None and panel.isVisible()
         if bubble is not None and bubble.isVisible():
             self._show_action.setText("Hide Bubble")
         else:
             self._show_action.setText("Show Bubble")
         self._show_action.setEnabled(not panel_visible)
+        if reminder is not None:
+            self._movement_action.setChecked(reminder.enabled)
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:

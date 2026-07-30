@@ -32,6 +32,14 @@ _EYE_HIDE = FA.EYE_SLASH
 _GENERATE  = FA.DICE
 
 
+def _strip_url_protocol(url: str) -> str:
+    """Remove http:// or https:// prefix so only the host/path is stored."""
+    for prefix in ("https://", "http://"):
+        if url.lower().startswith(prefix):
+            return url[len(prefix):]
+    return url
+
+
 class AddEditEntryDialog(QDialog):
     def __init__(
         self,
@@ -111,7 +119,7 @@ class AddEditEntryDialog(QDialog):
 
         # URL
         self._url_edit = QLineEdit()
-        self._url_edit.setPlaceholderText("e.g. https://github.com")
+        self._url_edit.setPlaceholderText("e.g. github.com")
         form.addRow("URL", self._url_edit)
 
         # Auto-login delay
@@ -237,7 +245,7 @@ class AddEditEntryDialog(QDialog):
         name     = self._name_edit.text().strip()
         username = self._user_edit.text().strip()
         secret   = self._secret_edit.text()
-        url      = self._url_edit.text().strip()
+        url      = _strip_url_protocol(self._url_edit.text().strip())
         category = self._cat_combo.currentText().strip() or "General"
         tags          = Entry.parse_tags(self._tags_edit.text())
         auto_login_ms = int(self._auto_login_edit.text() or 0)

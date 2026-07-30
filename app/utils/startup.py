@@ -41,14 +41,10 @@ def enable_startup() -> bool:
         return False
     try:
         import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            _RUN_KEY,
-            0,
-            winreg.KEY_SET_VALUE,
-        )
-        winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, _get_exe_path())
-        winreg.CloseKey(key)
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, _get_exe_path())
         logger.info("Startup entry enabled.")
         return True
     except Exception:
@@ -63,14 +59,10 @@ def disable_startup() -> bool:
         return False
     try:
         import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            _RUN_KEY,
-            0,
-            winreg.KEY_SET_VALUE,
-        )
-        winreg.DeleteValue(key, _APP_NAME)
-        winreg.CloseKey(key)
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            winreg.DeleteValue(key, _APP_NAME)
         logger.info("Startup entry removed.")
         return True
     except FileNotFoundError:
@@ -80,29 +72,33 @@ def disable_startup() -> bool:
         return False
 
 
-def is_startup_enabled() -> bool:
-    """Return True if the Run registry key exists."""
+def _get_registered_path() -> str | None:
+    """Return the value currently stored in the startup registry key, or None."""
     if sys.platform != "win32":
-        return False
+        return None
     try:
         import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            _RUN_KEY,
-            0,
-            winreg.KEY_READ,
-        )
-        winreg.QueryValueEx(key, _APP_NAME)
-        winreg.CloseKey(key)
-        return True
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_READ) as key:
+            value, _ = winreg.QueryValueEx(key, _APP_NAME)
+        return value
     except FileNotFoundError:
-        return False
+        return None
     except Exception:
         logger.exception("Could not query startup key.")
-        return False
+        return None
+
+
+def is_startup_enabled() -> bool:
+    """Return True if the *current* exe is registered for startup.
+
+    Checks both that the key exists and that the stored path matches the
+    running executable — so renaming the exe (e.g. sesame-1.4 → sesame-1.5)
+    correctly reports the startup as disabled rather than silently stale.
+    """
+    return _get_registered_path() == _get_exe_path()
 
 
 def ensure_startup_enabled() -> None:
-    """Enable startup only if not already registered (call on first run)."""
-    if not is_startup_enabled():
+    """Register startup on first run, or re-register if the exe path changed."""
+    if _get_registered_path() != _get_exe_path():
         enable_startup()

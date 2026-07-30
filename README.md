@@ -32,6 +32,7 @@ To run or build from source, see [`DEV_GUIDE.md`](DEV_GUIDE.md).
 - **Master password** — protect selected categories; prompted once per session
 - **Start with Windows** — enabled by default, no admin required
 - **Export / Import** — backup and restore your vault with AES-256-GCM encrypted `.sesame` files
+- **Bitwarden import** — import login items from an unencrypted Bitwarden JSON export; duplicates are skipped automatically
 
 ---
 
@@ -133,6 +134,7 @@ Right-click the tray icon for quick access:
 |---|---|
 | Show Bubble / Hide Bubble | Toggle the floating bubble (disabled while panel is open) |
 | Locate Sesame | Flash the bubble at screen centre |
+| Movement Reminder | Toggle the movement reminder on or off |
 | Settings | Open the Settings dialog |
 | ❤ Support Sesame | Open the sponsor page |
 | Exit Sesame | Quit the application |
@@ -148,10 +150,16 @@ Right-click the tray icon for quick access:
 4. A `.sesame` file is created — it is safe to copy or back up.
 
 ### Import Vault
-1. **Settings → Data → Import Vault…**
-2. Select the `.sesame` file.
-3. Enter the password.
-4. Entries are added to the current vault. The original file is never modified.
+1. **Settings → Data → Import → Vault** tab.
+2. Select the `.sesame` file and enter the password.
+3. Entries are added to the current vault. The original file is never modified.
+
+### Import from Bitwarden
+1. In Bitwarden: **Tools → Export Vault → JSON** format, **No encryption**.
+2. In Sesame: **Settings → Data → Import → Bitwarden** tab.
+3. Browse to the `.json` file and click **Import from Bitwarden…**.
+4. Only login items are imported; folders become categories; TOTP secrets are preserved.
+5. Entries where URL + username + password already exist in the vault are skipped.
 
 ---
 

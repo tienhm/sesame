@@ -429,10 +429,26 @@ class SettingsDialog(QDialog):
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         layout.addWidget(sep)
 
-        # ── Import ────────────────────────────────────────────────────
-        imp_lbl = QLabel("Import vault")
+        # ── Import (tabbed) ───────────────────────────────────────────
+        imp_lbl = QLabel("Import")
         imp_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
         layout.addWidget(imp_lbl)
+
+        imp_tabs = QTabWidget()
+        imp_tabs.addTab(self._build_import_vault_tab(), "Vault")
+        imp_tabs.addTab(self._build_import_otp_tab(),   "OTP")
+        imp_tabs.addTab(self._build_import_bw_tab(),    "Bitwarden")
+        layout.addWidget(imp_tabs)
+
+        layout.addStretch()
+        return w
+
+    def _build_import_vault_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(8, 10, 8, 8)
 
         file_row = QHBoxLayout()
         self._imp_path = QLineEdit(); self._imp_path.setReadOnly(True)
@@ -461,14 +477,15 @@ class SettingsDialog(QDialog):
         self._imp_pw.textChanged.connect(self._validate_import)
         self._imp_btn.clicked.connect(self._on_import)
         layout.addWidget(self._imp_btn)
+        layout.addStretch()
+        return w
 
-        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
-        layout.addWidget(sep2)
-
-        # ── Import OTP ────────────────────────────────────────────────
-        otp_lbl = QLabel("Import OTP secrets")
-        otp_lbl.setStyleSheet("font-weight: 600; color: #e8eaed;")
-        layout.addWidget(otp_lbl)
+    def _build_import_otp_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(8, 10, 8, 8)
 
         otp_desc = QLabel(
             "Paste an otpauth:// or otpauth-migration:// URI from Google\n"
@@ -496,7 +513,44 @@ class SettingsDialog(QDialog):
         otp_import_btn = QPushButton("Import OTP secrets")
         otp_import_btn.clicked.connect(self._on_import_otp)
         layout.addWidget(otp_import_btn)
+        layout.addStretch()
+        return w
 
+    def _build_import_bw_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(8, 10, 8, 8)
+
+        bw_desc = QLabel(
+            "Select an unencrypted Bitwarden JSON export.\n"
+            "Only login items are imported; folders become categories."
+        )
+        bw_desc.setWordWrap(True)
+        layout.addWidget(bw_desc)
+
+        bw_file_row = QHBoxLayout()
+        self._bw_path = QLineEdit(); self._bw_path.setReadOnly(True)
+        self._bw_path.setPlaceholderText("Select a Bitwarden .json export…")
+        bw_browse_btn = QPushButton("Browse…")
+        bw_browse_btn.setProperty("flat", True)
+        bw_browse_btn.setMinimumWidth(80)
+        bw_browse_btn.clicked.connect(self._browse_bitwarden_file)
+        bw_file_row.addWidget(self._bw_path, stretch=1)
+        bw_file_row.addWidget(bw_browse_btn)
+        layout.addLayout(bw_file_row)
+
+        self._bw_msg = QLabel("")
+        self._bw_msg.setStyleSheet("font-size: 11px;")
+        self._bw_msg.setWordWrap(True)
+        layout.addWidget(self._bw_msg)
+
+        self._bw_btn = QPushButton("Import from Bitwarden…")
+        self._bw_btn.setEnabled(False)
+        self._bw_path.textChanged.connect(lambda t: self._bw_btn.setEnabled(bool(t)))
+        self._bw_btn.clicked.connect(self._on_import_bitwarden)
+        layout.addWidget(self._bw_btn)
         layout.addStretch()
         return w
 
@@ -577,6 +631,70 @@ class SettingsDialog(QDialog):
         except Exception as e:
             self._imp_err.setStyleSheet("color: #e74c3c; font-size: 11px;")
             self._imp_err.setText(f"Import failed: {e}")
+
+    def _browse_bitwarden_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open Bitwarden Export", "", "JSON files (*.json)"
+        )
+        if path:
+            self._bw_path.setText(path)
+            self._bw_msg.setText("")
+
+    def _on_import_bitwarden(self) -> None:
+        from app.utils.bitwarden_import import parse_bitwarden_json
+        from app.models.entry import Entry
+        path = self._bw_path.text()
+        try:
+            with open(path, "rb") as f:
+                file_bytes = f.read()
+            entries_dicts, secrets, otp_secrets = parse_bitwarden_json(file_bytes)
+            if not entries_dicts:
+                self._bw_msg.setStyleSheet("color: #e74c3c; font-size: 11px;")
+                self._bw_msg.setText("No login items found in the file.")
+                return
+
+            def _norm_url(url: str) -> str:
+                u = url.lower()
+                for prefix in ("https://", "http://"):
+                    if u.startswith(prefix):
+                        return u[len(prefix):]
+                return u
+
+            # Build a lookup set of (url, username, password) for dedup
+            existing = {
+                (_norm_url(e.url), e.username.lower(), self._vault.get_secret(e.id))
+                for e in self._vault.entries
+            }
+
+            count, skipped = 0, 0
+            for ed in entries_dicts:
+                entry  = Entry.from_dict(ed)
+                secret = secrets.get(ed["id"], "")
+                key    = (_norm_url(entry.url), entry.username.lower(), secret)
+                if key in existing:
+                    skipped += 1
+                    continue
+                self._vault.add_entry(entry, secret)
+                existing.add(key)
+                otp = otp_secrets.get(ed["id"], "")
+                if otp:
+                    self._vault.set_otp_secret(entry.id, otp)
+                count += 1
+
+            if self._panel:
+                self._panel.refresh()
+            self._bw_path.clear()
+            self._bw_msg.setStyleSheet("color: #2d6a4f; font-size: 11px;")
+            msg = f"Imported {count} entries from Bitwarden."
+            if skipped:
+                msg += f" Skipped {skipped} duplicate(s)."
+            self._bw_msg.setText(msg)
+        except ValueError as e:
+            self._bw_msg.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._bw_msg.setText(str(e))
+        except Exception as e:
+            self._bw_msg.setStyleSheet("color: #e74c3c; font-size: 11px;")
+            self._bw_msg.setText(f"Import failed: {e}")
 
     def _browse_otp_qr(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
