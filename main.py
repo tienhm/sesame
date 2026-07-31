@@ -5,7 +5,7 @@ Wires together: Vault, ClipboardManager, Bubble, VaultPanel, TrayIcon.
 
 from __future__ import annotations
 
-__version__ = "1.5"
+__version__ = "1.6"
 
 import ctypes
 import logging
