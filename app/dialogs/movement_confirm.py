@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import random
+import sys
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -33,6 +35,22 @@ _QUOTES = [
 ]
 
 
+def _load_quotes() -> list[str]:
+    """Read resources/fun_quotes.txt (one quote per line); fall back to _QUOTES
+    if the file is missing, unreadable, or empty."""
+    res_dir = (os.path.join(sys._MEIPASS, "resources") if getattr(sys, "frozen", False)
+               else os.path.join(os.path.dirname(__file__), "..", "..", "resources"))
+    path = os.path.join(res_dir, "fun_quotes.txt")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = [line.strip() for line in fh if line.strip()]
+        if lines:
+            return lines
+    except OSError:
+        pass
+    return _QUOTES
+
+
 class MovementConfirmDialog(QDialog):
     """Non-blocking dialog with a funny quote and two action buttons."""
 
@@ -55,7 +73,7 @@ class MovementConfirmDialog(QDialog):
         layout.setSpacing(16)
         layout.setContentsMargins(24, 24, 24, 20)
 
-        quote_lbl = QLabel(random.choice(_QUOTES))
+        quote_lbl = QLabel(random.choice(_load_quotes()))
         quote_lbl.setWordWrap(True)
         quote_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         quote_lbl.setStyleSheet(
