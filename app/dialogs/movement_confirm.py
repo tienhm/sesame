@@ -46,7 +46,7 @@ def _load_quotes() -> list[str]:
             lines = [line.strip() for line in fh if line.strip()]
         if lines:
             return lines
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         pass
     return _QUOTES
 
