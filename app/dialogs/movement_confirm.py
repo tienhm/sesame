@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import random
-import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -35,14 +35,19 @@ _QUOTES = [
 ]
 
 
+def _quotes_path() -> Path:
+    appdata = os.environ.get("APPDATA") or Path.home()
+    directory = Path(appdata) / "Sesame"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / "fun_quotes.txt"
+
+
 def _load_quotes() -> list[str]:
-    """Read resources/fun_quotes.txt (one quote per line); fall back to _QUOTES
-    if the file is missing, unreadable, or empty."""
-    res_dir = (os.path.join(sys._MEIPASS, "resources") if getattr(sys, "frozen", False)
-               else os.path.join(os.path.dirname(__file__), "..", "..", "resources"))
-    path = os.path.join(res_dir, "fun_quotes.txt")
+    """Read %APPDATA%\\Sesame\\fun_quotes.txt (one quote per line); fall back
+    to _QUOTES if the file is missing, unreadable, or empty. Loaded at runtime
+    like config.json/cache.json — not bundled into the build."""
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(_quotes_path(), encoding="utf-8") as fh:
             lines = [line.strip() for line in fh if line.strip()]
         if lines:
             return lines
