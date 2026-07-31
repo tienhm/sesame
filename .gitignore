@@ -29,3 +29,6 @@ local/
 # Build temp
 *.tmp.*
 *.log
+
+# Pipeline working notes (stored in SilverBullet, not repo)
+WORKING.md
