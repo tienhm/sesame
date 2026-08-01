@@ -41,7 +41,7 @@ async function init() {
   statusEl.className = ok ? "ok" : "err";
   statusTextEl.textContent = ok
     ? "Connected"
-    : `Disconnected - Open Sesame ${appVersion()}`;
+    : "Disconnected - Launch Sesame";
 }
 
 init();

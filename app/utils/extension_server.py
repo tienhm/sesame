@@ -174,11 +174,11 @@ class ExtensionServer:
 
         try:
             pipe_sa = _pipe_security_attributes()
-        except pywintypes.error:
-            # Fail closed — better no pipe at all than one with a default,
-            # unrestricted DACL.
-            logger.exception("ExtensionServer: could not build restricted pipe security descriptor")
-            return
+        except Exception:
+            # Fall back to default security rather than failing entirely —
+            # a pipe with default DACL is still functional.
+            logger.exception("ExtensionServer: could not build restricted pipe security descriptor; using default")
+            pipe_sa = None
 
         while not self._stop:
             try:

@@ -90,6 +90,8 @@ a = Analysis(
         "PySide6.QtNetwork",
         "win32timezone",  # pywin32 freeze gotcha, needed even though not imported directly
         "win32cred",
+        "win32security",
+        "win32api",
         "pywintypes",
         "pyotp",           # imported dynamically at call-time in vault_panel.py
     ],
