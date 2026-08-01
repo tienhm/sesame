@@ -48,7 +48,18 @@ function nativeRequest(message) {
     }
 
     port.onMessage.addListener((response) => finish(response));
-    port.onDisconnect.addListener(() => finish(null));
+    port.onDisconnect.addListener(() => {
+      // Reading chrome.runtime.lastError marks it "checked" — Sesame not
+      // running yet (native host manifest not registered, or the process
+      // can't reach the pipe) disconnects the port with lastError set to
+      // something like "Specified native messaging host not found.". Not
+      // reading it here makes Chrome auto-log "Unchecked runtime.lastError"
+      // to the console on every failed attempt, which is exactly the spam
+      // this fixes — this is the expected "Sesame isn't up" case, not a
+      // real error, so it's deliberately swallowed rather than logged.
+      void chrome.runtime.lastError;
+      finish(null);
+    });
 
     try {
       port.postMessage(message);
