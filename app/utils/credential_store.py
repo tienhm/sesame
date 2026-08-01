@@ -5,6 +5,12 @@ Layout (single credential per entry):
   UserName       = ""  (unused — kept empty)
   CredentialBlob = JSON: {"p": "<password>", "o": "<otp_secret>"}
 
+A second, unrelated credential is used for the Sesame Pass browser extension
+pairing key:
+  TargetName     = "SZM:A"   (a letter — entry ids are always numeric strings,
+                               so this can never collide with an entry)
+  CredentialBlob = raw string "<uuid>:<port>" (NOT JSON like entries above)
+
 On non-Windows platforms falls back to an in-memory dict.
 """
 
@@ -17,7 +23,9 @@ import sys
 logger = logging.getLogger(__name__)
 
 _TARGET_PREFIX = "SZM"
+_EXTENSION_TARGET = "SZM:A"
 _dev_store: dict[str, dict] = {}   # {entry_id: {"p": str, "o": str}}
+_dev_extension_secret: str = ""
 
 
 def _target_name(entry_id: str) -> str:
@@ -120,3 +128,49 @@ def get_otp_secret(entry_id: str) -> str:
 def delete_otp_secret(entry_id: str) -> None:
     data = _read_raw(entry_id)
     _write_raw(entry_id, data["p"], "")
+
+
+# ---------------------------------------------------------------------------
+# Public API — Sesame Pass extension pairing key ("SZM:A", raw string blob)
+# ---------------------------------------------------------------------------
+
+def get_extension_secret() -> str:
+    """Return the stored "<uuid>:<port>" string, or "" if never set."""
+    global _dev_extension_secret
+    if sys.platform != "win32":
+        return _dev_extension_secret
+    import pywintypes, win32cred
+    try:
+        cred = win32cred.CredRead(_EXTENSION_TARGET, win32cred.CRED_TYPE_GENERIC, 0)
+        raw = cred["CredentialBlob"]
+        return raw.decode("utf-16-le") if isinstance(raw, (bytes, bytearray)) else str(raw)
+    except pywintypes.error:
+        return ""
+
+
+def set_extension_secret(value: str) -> None:
+    global _dev_extension_secret
+    if sys.platform != "win32":
+        _dev_extension_secret = value
+        return
+    import win32cred
+    win32cred.CredWrite({
+        "Type":           win32cred.CRED_TYPE_GENERIC,
+        "TargetName":     _EXTENSION_TARGET,
+        "UserName":       "",
+        "CredentialBlob": value,
+        "Comment":        "Sesame Pass extension pairing key",
+        "Persist":        win32cred.CRED_PERSIST_LOCAL_MACHINE,
+    }, 0)
+
+
+def delete_extension_secret() -> None:
+    global _dev_extension_secret
+    if sys.platform != "win32":
+        _dev_extension_secret = ""
+        return
+    import pywintypes, win32cred
+    try:
+        win32cred.CredDelete(_EXTENSION_TARGET, win32cred.CRED_TYPE_GENERIC, 0)
+    except pywintypes.error:
+        pass

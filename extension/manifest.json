@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Sesame Pass",
+  "version": "0.1.0",
+  "description": "Auto-fill usernames and passwords from Sesame into web forms.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Sesame Pass"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*"]
+}

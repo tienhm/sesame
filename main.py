@@ -31,6 +31,7 @@ from app.models.vault import Vault
 from app.tray import TrayIcon
 from app.utils.activity_log import ActivityLogger
 from app.utils.clipboard import ClipboardManager
+from app.utils.extension_server import ExtensionServer
 from app.utils.lock_manager import LockManager
 from app.utils.movement_reminder import MovementReminder
 from app.utils.startup import ensure_startup_enabled
@@ -101,6 +102,7 @@ class SesameApp:
         self._clipboard = ClipboardManager(self._config)
         self._lock_mgr = LockManager(self._config)
         self._icon = _make_icon()
+        self._extension_server = ExtensionServer(self._config, self._vault, self._lock_mgr)
 
         self._panel = VaultPanel(self._vault, self._clipboard, self._lock_mgr, self._config)
         self._bubble = Bubble(self._config)
@@ -286,6 +288,7 @@ class SesameApp:
                              export_fn=self.export_vault,
                              import_fn=self.import_vault,
                              reminder=self._movement_reminder,
+                             extension_server=self._extension_server,
                              parent=None)
         dlg.exec()
         self._panel.refresh()
@@ -358,6 +361,7 @@ class SesameApp:
                 dlg.set_error(str(e))
 
     def quit_app(self) -> None:
+        self._extension_server.shutdown()
         self._panel.close()
         self._bubble.close()
         self._tray.hide()

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QPoint, QRect, Signal
+from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSlider,
     QSpinBox,
@@ -32,6 +34,7 @@ from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 
 from app.config import AppConfig
 from app.models.vault import Vault
+from app.utils.browser_discovery import DISPLAY_NAMES, detect_installed_browsers
 from app.utils.lock_manager import LockManager
 from app.utils.startup import disable_startup, enable_startup, is_startup_enabled
 
@@ -48,6 +51,7 @@ class SettingsDialog(QDialog):
         export_fn=None,
         import_fn=None,
         reminder=None,
+        extension_server=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -70,6 +74,7 @@ class SettingsDialog(QDialog):
         self._export_fn = export_fn
         self._import_fn = import_fn
         self._reminder = reminder
+        self._extension_server = extension_server
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -86,6 +91,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_categories_tab(), "Categories")
         self._tabs.addTab(self._build_security_tab(), "Security")
         self._tabs.addTab(self._build_data_tab(), "Data")
+        self._tabs.addTab(self._build_extensions_tab(), "Extensions")
         layout.addWidget(self._tabs)
 
         close_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -841,6 +847,148 @@ class SettingsDialog(QDialog):
         idx = self._default_cat_combo.findText(saved) if saved else 0
         self._default_cat_combo.setCurrentIndex(max(0, idx))
         self._default_cat_combo.blockSignals(False)
+
+    # ── Extensions tab ─────────────────────────────────────────────────
+
+    def _build_extensions_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        intro = QLabel(
+            "Sesame Pass is a browser extension that auto-fills username/"
+            "password into web forms. Pair each browser once below."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #adb5bd; font-size: 11px;")
+        layout.addWidget(intro)
+
+        code_label = QLabel("Pairing code")
+        code_label.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(code_label)
+
+        code_row = QHBoxLayout()
+        self._ext_code_edit = QLineEdit()
+        self._ext_code_edit.setReadOnly(True)
+        self._ext_code_edit.setText(
+            self._extension_server.pairing_code if self._extension_server else ""
+        )
+        copy_btn = QPushButton("Copy")
+        copy_btn.clicked.connect(self._on_copy_pairing_code)
+        regen_btn = QPushButton("Regenerate…")
+        regen_btn.clicked.connect(self._on_regenerate_pairing_code)
+        regen_btn.setEnabled(self._extension_server is not None)
+        copy_btn.setEnabled(self._extension_server is not None)
+        code_row.addWidget(self._ext_code_edit, stretch=1)
+        code_row.addWidget(copy_btn)
+        code_row.addWidget(regen_btn)
+        layout.addLayout(code_row)
+
+        hint = QLabel(
+            "Paste this once into the Sesame Pass extension popup. Treat it "
+            "like a password — anyone with it can read entries via the "
+            "extension."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #adb5bd; font-size: 11px;")
+        layout.addWidget(hint)
+
+        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+        layout.addWidget(sep)
+
+        browsers_label = QLabel("Detected browsers")
+        browsers_label.setStyleSheet("font-weight: 600; color: #e8eaed;")
+        layout.addWidget(browsers_label)
+
+        self._ext_browser_rows: dict[str, tuple[QLabel, QLabel]] = {}
+        detected = detect_installed_browsers()
+        if not detected:
+            none_lbl = QLabel("No supported browser detected on this machine.")
+            none_lbl.setWordWrap(True)
+            none_lbl.setStyleSheet("color: #adb5bd; font-size: 11px;")
+            layout.addWidget(none_lbl)
+        for key in detected:
+            row = QHBoxLayout()
+            dot = QLabel("●")
+            dot.setFixedWidth(16)
+            name_lbl = QLabel(DISPLAY_NAMES.get(key, key.title()))
+            name_lbl.setFixedWidth(70)
+            status_lbl = QLabel("")
+            status_lbl.setStyleSheet("color: #adb5bd; font-size: 11px;")
+            install_btn = QPushButton("Install…")
+            install_btn.setProperty("flat", True)
+            install_btn.clicked.connect(self._on_show_install_instructions)
+            row.addWidget(dot)
+            row.addWidget(name_lbl)
+            row.addWidget(status_lbl, stretch=1)
+            row.addWidget(install_btn)
+            layout.addLayout(row)
+            self._ext_browser_rows[key] = (dot, status_lbl)
+
+        self._refresh_extension_rows()
+
+        if self._extension_server:
+            self._extension_server.bridge.heartbeat_received.connect(
+                self._on_extension_heartbeat
+            )
+            self._ext_status_timer = QTimer(self)
+            self._ext_status_timer.setInterval(1000)
+            self._ext_status_timer.timeout.connect(self._refresh_extension_rows)
+            self._ext_status_timer.start()
+
+        layout.addStretch()
+        return w
+
+    def _refresh_extension_rows(self) -> None:
+        for key, (dot, status_lbl) in self._ext_browser_rows.items():
+            paired = bool(self._config.get(f"extension_paired_{key}", False))
+            connected = bool(
+                self._extension_server and self._extension_server.is_connected(key)
+            )
+            if connected:
+                dot.setStyleSheet("color: #2d6a4f; font-size: 14px;")
+                status_lbl.setText("Connected")
+            elif paired:
+                dot.setStyleSheet("color: #6c6f7a; font-size: 14px;")
+                status_lbl.setText("Paired (not running)")
+            else:
+                dot.setStyleSheet("color: #6c6f7a; font-size: 14px;")
+                status_lbl.setText("Not paired")
+
+    def _on_extension_heartbeat(self, browser: str) -> None:
+        self._refresh_extension_rows()
+
+    def _on_copy_pairing_code(self) -> None:
+        QApplication.clipboard().setText(self._ext_code_edit.text())
+
+    def _on_regenerate_pairing_code(self) -> None:
+        if not self._extension_server:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Regenerate Pairing Code",
+            "Any browser extension already paired will stop working until "
+            "you paste the new code into it. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._extension_server.regenerate()
+        self._ext_code_edit.setText(self._extension_server.pairing_code)
+        self._refresh_extension_rows()
+
+    def _on_show_install_instructions(self) -> None:
+        QMessageBox.information(
+            self,
+            "Install Sesame Pass",
+            "Sesame Pass isn't published to a browser store yet.\n\n"
+            "To install it manually:\n"
+            "1. Open your browser's extensions page (e.g. chrome://extensions)\n"
+            "2. Enable Developer mode\n"
+            "3. Click 'Load unpacked' and select the 'extension' folder from "
+            "the Sesame source.",
+        )
 
 
 # ---------------------------------------------------------------------------
