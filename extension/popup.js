@@ -33,7 +33,7 @@ async function init() {
   const browser = await guessBrowser();
   await chrome.storage.local.set({ browser });
 
-  titleEl.textContent = `Sesame ${capitalize(browser)} Pass`;
+  titleEl.textContent = `🔑 Sesame ${capitalize(browser)} Pass`;
 
   const response = await sendToBackground({ type: "ping", browser });
   const ok = !!(response && response.ok);
