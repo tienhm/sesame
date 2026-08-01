@@ -27,20 +27,49 @@ from app.utils import native_messaging  # noqa: E402
 _CONNECT_TIMEOUT_MS = 2000
 
 
+_stdin_buf = None
+_stdout_buf = None
+
+
 def _stdin_read(n: int) -> bytes:
-    return sys.stdin.buffer.read(n)
+    return _stdin_buf.read(n)
 
 
 def _stdout_write(data: bytes) -> None:
-    sys.stdout.buffer.write(data)
-    sys.stdout.buffer.flush()
+    _stdout_buf.write(data)
+    _stdout_buf.flush()
 
 
 def _set_binary_mode() -> None:
-    if sys.platform == "win32":
-        import msvcrt
-        msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+    global _stdin_buf, _stdout_buf
+    if sys.platform != "win32":
+        # Non-Windows: use sys.stdin/stdout directly (dev/testing only).
+        _stdin_buf  = sys.stdin.buffer
+        _stdout_buf = sys.stdout.buffer
+        return
+    import io
+    import msvcrt
+
+    if sys.stdin is None:
+        # Frozen as windowed app (console=False) — PyInstaller leaves
+        # sys.stdin/stdout as None. Chrome still passes the pipe via
+        # handle inheritance; open them directly from Win32 STD handles.
+        import win32api
+        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE = -10, -11
+        h_in  = win32api.GetStdHandle(STD_INPUT_HANDLE)
+        h_out = win32api.GetStdHandle(STD_OUTPUT_HANDLE)
+        if h_in is None or h_out is None or int(h_in) in (0, -1) or int(h_out) in (0, -1):
+            # Not spawned by Chrome — no valid stdio handles.
+            sys.exit(1)
+        fd_in  = msvcrt.open_osfhandle(int(h_in),  os.O_RDONLY | os.O_BINARY)
+        fd_out = msvcrt.open_osfhandle(int(h_out), os.O_WRONLY | os.O_BINARY)
+        _stdin_buf  = io.open(fd_in,  "rb", buffering=0)
+        _stdout_buf = io.open(fd_out, "wb", buffering=0)
+    else:
+        msvcrt.setmode(sys.stdin.fileno(),  os.O_BINARY)
         msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+        _stdin_buf  = sys.stdin.buffer
+        _stdout_buf = sys.stdout.buffer
 
 
 def _forward_to_pipe(message: dict) -> dict:

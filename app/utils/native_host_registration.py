@@ -33,11 +33,32 @@ _REGISTRY_TARGETS = [
 
 
 def _native_host_exe_path() -> str:
-    """Path to the native host exe/script — sits next to the main Sesame exe
-    when frozen (PyInstaller), or is native_host.py when running from source."""
+    """Return a stable path to szm_door.exe, deploying it first if needed.
+
+    When frozen: the exe is bundled inside Sesame (binaries in sesame.spec) and
+    extracted by PyInstaller to sys._MEIPASS — a temp dir that changes every run.
+    We copy it to %LOCALAPPDATA%\\Sesame\\ once (or whenever it changes) so the
+    Chrome/Edge manifest always points to a fixed, version-stable path.
+
+    When running from source: native_host.py is used directly (dev only).
+    """
     if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-        return os.path.join(base_dir, "sesame_native_host.exe")
+        stable_dir = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Sesame")
+        os.makedirs(stable_dir, exist_ok=True)
+        stable_path = os.path.join(stable_dir, "szm_door.exe")
+        bundled = os.path.join(sys._MEIPASS, "szm_door.exe")
+        if os.path.exists(bundled):
+            import shutil
+            try:
+                shutil.copy2(bundled, stable_path)
+            except OSError:
+                # szm_door.exe may be in use by an active Chrome session — skip
+                # the copy; the existing stable copy is still valid.
+                if not os.path.exists(stable_path):
+                    logger.exception("native_host_registration: could not deploy %s", stable_path)
+        elif not os.path.exists(stable_path):
+            logger.warning("native_host_registration: szm_door.exe not found in bundle (%s)", bundled)
+        return stable_path
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.join(repo_root, "native_host.py")
 

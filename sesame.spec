@@ -70,7 +70,9 @@ block_cipher = None
 a = Analysis(
     ["main.py"],
     pathex=[os.path.abspath(".")],
-    binaries=[],
+    binaries=[
+        ("dist/szm_door.exe", "."),
+    ],
     datas=[
         ("resources/style.qss", "resources"),
         ("resources/icon.png", "resources"),

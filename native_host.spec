@@ -45,14 +45,14 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="sesame_native_host",
+    name="szm_door",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,          # no console window — Chrome talks to it via pipes only
+    console=False,          # no console window — stdin/stdout opened from Win32 STD handles in _set_binary_mode
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
