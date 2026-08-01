@@ -102,9 +102,12 @@
   function attachShiftReveal() {
     shiftKeyHandler = (ev) => {
       if (ev.key !== "Shift" || !tooltipEl) return;
-      const show = ev.type === "keydown";
+      const shifted = ev.type === "keydown";
       tooltipEl.querySelectorAll('[data-shift-reveal="1"]').forEach((btn) => {
-        btn.style.display = show ? "inline-block" : "none";
+        btn.style.display = shifted ? "inline-block" : "none";
+      });
+      tooltipEl.querySelectorAll('[data-shift-primary="1"]').forEach((btn) => {
+        btn.style.display = shifted ? "none" : "inline-block";
       });
     };
     document.addEventListener("keydown", shiftKeyHandler);
@@ -252,6 +255,7 @@
           "cursor:pointer; background:#5865f2; color:#fff; border:none; border-radius:4px; padding:2px 6px;" +
           (hiddenByDefault ? " display:none;" : "");
         if (hiddenByDefault) btn.dataset.shiftReveal = "1";
+        else btn.dataset.shiftPrimary = "1";
         btn.addEventListener("mousedown", async (ev) => {
           ev.preventDefault(); // keep the field focused
           ev.stopPropagation();
@@ -260,9 +264,15 @@
         return btn;
       };
 
-      row.appendChild(makeButton(guessed, false));
-      if (other !== "username" || entry.has_username) {
+      const primaryBtn = makeButton(guessed, false);
+      row.appendChild(primaryBtn);
+      const hasSecondary = other !== "username" || entry.has_username;
+      if (hasSecondary) {
         row.appendChild(makeButton(other, true));
+      } else {
+        // No secondary button exists — don't mark primary as shift-swappable
+        // or Shift will hide the only button with nothing to replace it.
+        delete primaryBtn.dataset.shiftPrimary;
       }
       root.appendChild(row);
     });
