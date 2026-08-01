@@ -1,22 +1,18 @@
-// Sesame Pass — content script: on click/focus of a username/password field,
-// offer to fill it from a matching Sesame entry. Field-mapping (which input
-// on this domain is username vs password) is learned and kept entirely in
+// Sesame Pass — content script: on focus of a username/password field, offer
+// to fill it from a matching Sesame entry. Field-mapping (which input on
+// this domain is username vs password) is learned and kept entirely in
 // chrome.storage.local — Sesame's backend never sees it.
 //
 // The browser's own built-in password manager also reacts to focus on these
 // same fields and shows its native "choose saved password" dropdown, which
 // visually competes with (and can render on top of / block) our own
-// suggestion UI. Two mitigations, matching what other password-manager
-// extensions do:
-//   1. On first encountering a field, mark autocomplete "off"/"new-password"
-//      and briefly toggle `readonly` on focus — a well-known best-effort
-//      trick that suppresses Chrome's native suggestion dropdown for that
-//      focus event. Not 100% guaranteed (browsers keep tightening this), but
-//      meaningfully reduces collisions.
-//   2. Don't show our own suggestion panel automatically on focus at all —
-//      only show a small inline badge (so we never race the browser's
-//      autofill popup for the same screen space); the full suggestion list
-//      only opens when the user deliberately clicks that badge.
+// suggestion UI. Best-effort mitigation only (per explicit product decision —
+// showing the picker immediately on focus matters more than dodging this
+// collision): on first encountering a field, mark autocomplete
+// "off"/"new-password" and briefly toggle `readonly` on focus, a well-known
+// trick that suppresses the native suggestion dropdown for that focus event.
+// Not 100% guaranteed (browsers keep tightening this) and does not fully
+// eliminate the collision.
 
 (() => {
   const FILLABLE_TYPES = new Set(["text", "email", "password", "tel", "", null]);
@@ -25,8 +21,7 @@
   const FIRST_PORT = 37821;
 
   let tooltipEl = null;
-  let badgeEl = null;
-  let badgeForEl = null;
+  let tooltipForEl = null;
   const handledFields = new WeakSet();
   let lastLivenessCheck = 0;
   let cachedLiveness = null;   // { paired: bool, running: bool, port: number|null }
@@ -101,74 +96,22 @@
     if (tooltipEl) {
       tooltipEl.remove();
       tooltipEl = null;
+      tooltipForEl = null;
     }
   }
 
-  function removeBadge() {
-    if (badgeEl) {
-      badgeEl.remove();
-      badgeEl = null;
-      badgeForEl = null;
-    }
-  }
-
-  function removeOverlays() {
-    removeTooltip();
-    removeBadge();
-  }
-
-  function positionBadge(el) {
+  function positionTooltip(el) {
     const rect = el.getBoundingClientRect();
-    badgeEl.style.top = `${rect.top + Math.max(0, (rect.height - 18) / 2)}px`;
-    badgeEl.style.left = `${rect.right - 22}px`;
-  }
-
-  // Small inline icon anchored to the field's own position — shown on focus
-  // instead of the full suggestion list, so we never fight the browser's
-  // native dropdown for the same spot. Clicking it opens the real menu.
-  function showBadge(el) {
-    if (badgeForEl === el) {
-      positionBadge(el); // already showing for this field — just realign
-      return;
-    }
-    removeBadge();
-    badgeEl = document.createElement("div");
-    badgeForEl = el;
-    badgeEl.textContent = "🔑";
-    badgeEl.title = "Sesame Pass";
-    badgeEl.style.cssText = `
-      position: fixed;
-      width: 18px;
-      height: 18px;
-      z-index: 2147483647;
-      cursor: pointer;
-      font-size: 12px;
-      line-height: 18px;
-      text-align: center;
-      background: #25262f;
-      border: 1px solid #3a3b47;
-      border-radius: 4px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-    `;
-    positionBadge(el);
-    // mousedown + preventDefault (not click) so the input never loses focus
-    // when the badge is pressed.
-    badgeEl.addEventListener("mousedown", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      onBadgeActivated(el);
-    });
-    document.body.appendChild(badgeEl);
+    tooltipEl.style.top = `${rect.bottom + 4}px`;
+    tooltipEl.style.left = `${rect.left}px`;
   }
 
   function showTooltip(anchor, contentBuilder) {
     removeTooltip();
-    const rect = anchor.getBoundingClientRect();
     tooltipEl = document.createElement("div");
+    tooltipForEl = anchor;
     tooltipEl.style.cssText = `
       position: fixed;
-      top: ${rect.bottom + 4}px;
-      left: ${rect.left}px;
       z-index: 2147483647;
       background: #25262f;
       color: #e8eaed;
@@ -181,6 +124,7 @@
     `;
     contentBuilder(tooltipEl);
     document.body.appendChild(tooltipEl);
+    positionTooltip(anchor);
   }
 
   function warningTooltip(anchor, message) {
@@ -244,10 +188,11 @@
     return fieldMap?.[domain]?.[fieldKey];
   }
 
-  // Triggered by a deliberate click on the inline badge — this is where the
-  // actual liveness/pairing/entries logic runs, well after the browser's own
-  // focus-triggered autofill dropdown has already had its chance to appear.
-  async function onBadgeActivated(el) {
+  // Runs directly on focus — liveness/pairing check first (cached, see
+  // checkLiveness) so most focuses resolve instantly, then shows the
+  // suggestion tooltip right away per product decision (see file header for
+  // the native-dropdown collision tradeoff this accepts).
+  async function onFieldFocus(el) {
     const liveness = await checkLiveness();
 
     if (!liveness.running) {
@@ -331,7 +276,7 @@
     (ev) => {
       if (isFillableInput(ev.target)) {
         suppressNativeAutofill(ev.target);
-        showBadge(ev.target);
+        onFieldFocus(ev.target);
       }
     },
     true
@@ -339,22 +284,22 @@
 
   document.addEventListener("focusout", (ev) => {
     const target = ev.target;
-    if (target !== badgeForEl) return;
-    // Small delay so a mousedown on the badge/tooltip isn't dismissed by the
-    // input losing focus first (the badge/tooltip buttons already call
+    if (target !== tooltipForEl) return;
+    // Small delay so a mousedown on the tooltip's fill buttons isn't
+    // dismissed by the input losing focus first (those buttons already call
     // preventDefault on mousedown to avoid this, but scroll/other blur
-    // sources are still handled here). Re-check badgeForEl at fire time —
+    // sources are still handled here). Re-check tooltipForEl at fire time —
     // tabbing straight to the next fillable field already reassigned it to
-    // that field's badge, which must survive.
+    // that field's tooltip, which must survive.
     setTimeout(() => {
-      if (badgeForEl === target) removeOverlays();
+      if (tooltipForEl === target) removeTooltip();
     }, 150);
   });
 
-  // Keep the badge aligned with its field across scrolling/resizing while
-  // it's shown; cheap since it only runs while a badge exists.
+  // Keep the tooltip aligned with its field across scrolling/resizing while
+  // it's shown; cheap since it only runs while a tooltip exists.
   const reposition = () => {
-    if (badgeForEl) showBadge(badgeForEl);
+    if (tooltipForEl) positionTooltip(tooltipForEl);
   };
   window.addEventListener("scroll", reposition, true);
   window.addEventListener("resize", reposition);
