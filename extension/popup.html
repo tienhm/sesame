@@ -16,21 +16,9 @@
       font-size: 14px;
       margin: 0 0 10px;
     }
-    label {
-      display: block;
+    #browser-info {
       font-size: 11px;
       color: #adb5bd;
-      margin-bottom: 4px;
-    }
-    select {
-      width: 100%;
-      box-sizing: border-box;
-      background: #2e2f3a;
-      color: #e8eaed;
-      border: 1px solid #3a3b47;
-      border-radius: 4px;
-      padding: 6px;
-      font-size: 12px;
       margin-bottom: 8px;
     }
     #status {
@@ -44,16 +32,7 @@
 </head>
 <body>
   <h1>🔑 Sesame Pass</h1>
-
-  <label for="browser-select">This browser</label>
-  <select id="browser-select">
-    <option value="chrome">Chrome</option>
-    <option value="edge">Edge</option>
-    <option value="brave">Brave</option>
-    <option value="opera">Opera</option>
-    <option value="firefox">Firefox</option>
-  </select>
-
+  <div id="browser-info"></div>
   <div id="status">Checking…</div>
 
   <script src="popup.js"></script>

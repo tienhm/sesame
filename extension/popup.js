@@ -1,10 +1,9 @@
-// Sesame Pass — popup: no pairing step anymore (Native Messaging trusts the
-// extension by its pinned ID, see manifest.json's "key" + Sesame's registered
-// host manifest). Just remember which browser this is (for Settings' status
-// list) and show whether Sesame is reachable right now.
+// Sesame Pass — popup: auto-detect browser, show connection status.
+// No manual browser selector — guessBrowser() reads the UA and stores
+// the result in storage so the background heartbeat uses the same value.
 
-const browserSelect = document.getElementById("browser-select");
-const statusEl = document.getElementById("status");
+const browserInfoEl = document.getElementById("browser-info");
+const statusEl      = document.getElementById("status");
 
 function setStatus(text, ok) {
   statusEl.textContent = text;
@@ -13,9 +12,9 @@ function setStatus(text, ok) {
 
 function guessBrowser() {
   const ua = navigator.userAgent;
-  if (ua.includes("Edg/")) return "edge";
-  if (ua.includes("OPR/")) return "opera";
-  if (ua.includes("Brave/")) return "brave";
+  if (ua.includes("Edg/"))     return "edge";
+  if (ua.includes("OPR/"))     return "opera";
+  if (ua.includes("Brave/"))   return "brave";
   if (ua.includes("Firefox/")) return "firefox";
   return "chrome";
 }
@@ -23,34 +22,24 @@ function guessBrowser() {
 function sendToBackground(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
-      if (chrome.runtime.lastError) {
-        resolve(null);
-        return;
-      }
+      if (chrome.runtime.lastError) { resolve(null); return; }
       resolve(response);
     });
   });
 }
 
-async function refreshStatus() {
-  const response = await sendToBackground({ type: "ping", browser: browserSelect.value });
+async function init() {
+  const browser = guessBrowser();
+  await chrome.storage.local.set({ browser });
+  browserInfoEl.textContent = `Browser: ${browser}`;
+
+  const response = await sendToBackground({ type: "ping", browser });
   setStatus(
     response && response.ok
       ? "Connected — Sesame is running."
-      : "Sesame not detected — make sure it's running and the extension is installed correctly.",
+      : "Sesame not detected — make sure it's running.",
     !!(response && response.ok)
   );
 }
-
-async function init() {
-  const { browser } = await chrome.storage.local.get(["browser"]);
-  browserSelect.value = browser || guessBrowser();
-  await refreshStatus();
-}
-
-browserSelect.addEventListener("change", async () => {
-  await chrome.storage.local.set({ browser: browserSelect.value });
-  await refreshStatus();
-});
 
 init();
