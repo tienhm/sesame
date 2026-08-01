@@ -44,5 +44,17 @@ Make-Package "chrome"  "sesame-pass-chrome-v$version.zip"
 Make-Package "edge"    "sesame-pass-edge-v$version.zip"
 Make-Package "firefox" "sesame-pass-firefox-v$version.xpi"
 
+# Also keep an unpacked Firefox dev build so about:debugging can load it directly
+# (Firefox always reads manifest.json from the directory, not the selected file).
+$ffDev = "$outDir\firefox-dev"
+Remove-Item -Recurse -Force $ffDev -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $ffDev | Out-Null
+Copy-Item "$src\*" $ffDev -Recurse
+$mf = Get-Content "$src\manifest-ff.json" -Raw | ConvertFrom-Json
+$mf.version = $semver
+$mf | ConvertTo-Json -Depth 10 | Set-Content "$ffDev\manifest.json" -Encoding utf8
+Remove-Item "$ffDev\manifest-ff.json" -ErrorAction SilentlyContinue
+Write-Host "  $ffDev\ (load this folder in about:debugging)" -ForegroundColor Green
+
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 Write-Host "Done." -ForegroundColor Green
