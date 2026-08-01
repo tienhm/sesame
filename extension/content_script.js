@@ -248,7 +248,7 @@
         } else if (elType === "password") {
           fieldsToOffer = ["password"];
         } else if (entry.has_username) {
-          fieldsToOffer = ["username", "password"]; // ambiguous text field — let user pick, remembered next time
+          fieldsToOffer = ["username"]; // non-password field — only username makes sense here
         } else {
           fieldsToOffer = ["password"];
         }
