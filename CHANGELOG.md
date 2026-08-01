@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.6 — 2026-08-01
+
+### Added
+- **Extension toolbar icon reflects connection state** — colored while the background worker's heartbeat gets a response from Sesame, grayed out otherwise (including right after browser startup, before the first heartbeat has had a chance to run)
+
+### Removed
+- **Auto-login (Windows)** — the blind `SendInput` keystroke-typing feature (`username → TAB → password` after opening a URL) has been removed in favor of the browser extension's field-targeted autofill, which is strictly more reliable (it fills the actual DOM field rather than blindly typing after a fixed delay)
+
+### Changed
+- **Browser extension: double-click instead of focus** — the autofill suggestion tooltip now appears on double-click of a field instead of on focus, to avoid competing for screen space with the browser's own native password-manager popup (which still reacts to focus)
+- **Browser extension: Shift reveals the other field on demand** — replaced the persistent per-site learned field-mapping with a live escape hatch: while the tooltip is open, holding Shift reveals the non-guessed field's button too (👤 alongside 🔑 or vice versa), so a password can still be pasted into a field a site's own show/hide toggle flipped to `type="text"`, without Sesame needing to remember anything between visits
+
+### Security
+- **Extension bridge named pipe locked down to the current user** — `ExtensionServer`'s named pipe (`\\.\pipe\SesamePassExt`) previously used `CreateNamedPipe`'s default security descriptor, which is broad enough that any other process running as the same Windows user (not just the browser's native-messaging host) could connect directly and query/reveal vault secrets, bypassing the browser extension, its `allowed_origins` check, and the native host entirely. The pipe now gets an explicit DACL restricting access to the current user (+ SYSTEM); the server refuses to start rather than fall back to an unrestricted pipe if that descriptor can't be built
+
 ## v1.5 — 2026-07-30
 
 ### Added

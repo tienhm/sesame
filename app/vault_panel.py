@@ -53,7 +53,6 @@ from app.config import AppConfig
 from app.dialogs.settings import UnlockDialog
 from app.models.entry import Entry
 from app.models.vault import Vault
-from app.utils import auto_login
 from app.utils.clipboard import ClipboardManager
 from app.utils.lock_manager import LockManager
 
@@ -820,18 +819,6 @@ class VaultPanel(QWidget):
         if not entry or not entry.url:
             return
         QDesktopServices.openUrl(QUrl(_url_with_https(entry.url)))
-        if entry.auto_login_ms > 0:
-            QTimer.singleShot(entry.auto_login_ms, lambda: self._do_auto_login(entry_id))
-
-    def _do_auto_login(self, entry_id: str) -> None:
-        entry = next((e for e in self._vault.entries if e.id == entry_id), None)
-        if not entry:
-            return
-        if not self._ensure_unlocked(entry):
-            return
-        secret = self._vault.get_secret(entry_id) or ""
-        inter_key_delay = float(self._config.get("auto_login_inter_key_delay_s", 0.012))
-        auto_login.send_credentials(entry.username, secret, inter_key_delay)
 
     def _ensure_unlocked(self, entry: Entry) -> bool:
         if not self._lock_mgr.is_locked(entry.category):

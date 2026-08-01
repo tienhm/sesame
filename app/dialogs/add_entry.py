@@ -6,7 +6,6 @@ import secrets
 import string
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIntValidator
 from app.utils.icons import FA
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -122,12 +121,6 @@ class AddEditEntryDialog(QDialog):
         self._url_edit.setPlaceholderText("e.g. github.com")
         form.addRow("URL", self._url_edit)
 
-        # Auto-login delay
-        self._auto_login_edit = QLineEdit()
-        self._auto_login_edit.setPlaceholderText("0 = off — else ms to wait before typing")
-        self._auto_login_edit.setValidator(QIntValidator(0, 60_000, self))
-        form.addRow("Auto-login", self._auto_login_edit)
-
         # OTP secret (TOTP) — hidden like password
         self._otp_edit = QLineEdit()
         self._otp_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -196,8 +189,6 @@ class AddEditEntryDialog(QDialog):
         self._name_edit.setText(entry.name)
         self._user_edit.setText(entry.username)
         self._url_edit.setText(entry.url)
-        if entry.auto_login_ms:
-            self._auto_login_edit.setText(str(entry.auto_login_ms))
         if entry.has_otp:
             self._otp_edit.setText(self._vault.get_otp_secret(entry.id))
         self._tags_edit.setText(", ".join(entry.tags))
@@ -248,7 +239,6 @@ class AddEditEntryDialog(QDialog):
         url      = _strip_url_protocol(self._url_edit.text().strip())
         category = self._cat_combo.currentText().strip() or "General"
         tags          = Entry.parse_tags(self._tags_edit.text())
-        auto_login_ms = int(self._auto_login_edit.text() or 0)
         otp_secret    = self._otp_edit.text().strip().upper().replace(" ", "")
 
         if not name:
@@ -264,7 +254,6 @@ class AddEditEntryDialog(QDialog):
         self._result_url      = url
         self._result_category = category
         self._result_tags          = tags
-        self._result_auto_login_ms = auto_login_ms
         self._result_otp_secret    = otp_secret
         self._result_has_otp       = bool(otp_secret)
         self.accept()
@@ -280,7 +269,6 @@ class AddEditEntryDialog(QDialog):
             category=self._result_category,
             tags=self._result_tags,
             url=self._result_url,
-            auto_login_ms=self._result_auto_login_ms,
             has_otp=self._result_has_otp,
         )
         if self._is_edit:

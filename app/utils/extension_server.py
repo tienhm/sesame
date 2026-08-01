@@ -3,12 +3,21 @@ architecture — replaces the old HTTP-loopback server).
 
 The browser never talks to this process directly anymore. Chrome/Edge spawn
 a short-lived native-messaging host process (`native_host.py`, built as its
-own exe — see native_host.spec) per request; that process is the only thing
-that ever connects to this pipe, and only after the browser has already
+own exe — see native_host.spec) per request, which is meant to be the only
+thing that ever connects to this pipe, after the browser has already
 verified the extension's ID against `allowed_origins` in the registered host
-manifest (see `app/utils/native_host_registration.py`). That is the entire
-trust boundary now — no bearer token, no port number, nothing to copy/paste
-into the extension popup.
+manifest (see `app/utils/native_host_registration.py`). That check only
+constrains which *extension* Chrome will launch the native host for — it
+says nothing about who else on the machine can open the pipe directly.
+`CreateNamedPipe` defaults to a broad DACL when given no explicit security
+descriptor, so without locking it down, any other process already running
+as the same Windows user (not just the native host) could connect straight
+to this pipe and issue `entries`/`reveal` requests, skipping the browser,
+the extension-ID check, and the native host entirely. `_pipe_security_attributes()`
+below closes that gap by restricting the pipe's DACL to the current user
+(+ SYSTEM) — no bearer token, no port number, nothing to copy/paste into
+the extension popup, but also no longer openable by an arbitrary co-resident
+process.
 
 Runs a named-pipe server on a background thread, accepting one client
 connection at a time and handing each off to its own handler thread so a
@@ -63,6 +72,31 @@ def _domain_matches(entry_url: str, requested_domain: str) -> bool:
     entry_host = _normalize_host(entry_url)
     req_host = _normalize_host(requested_domain)
     return bool(entry_host) and entry_host == req_host
+
+
+def _pipe_security_attributes():
+    """SECURITY_ATTRIBUTES restricting the named pipe's DACL to the current
+    Windows user plus SYSTEM — CreateNamedPipe's default (no explicit
+    descriptor) is broad enough that any other locally-running process under
+    this same account could otherwise open the pipe directly. Built once per
+    server start and reused for every pipe instance; the DACL doesn't change
+    between connections."""
+    import pywintypes
+    import win32api
+    import win32security
+
+    token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32security.TOKEN_QUERY)
+    user_sid = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
+    sid_str = win32security.ConvertSidToStringSid(user_sid)
+    # D: DACL, (A;;GA;;;<sid>) = Allow Generic-All to the given SID. No ACE
+    # for anyone else means everyone else is implicitly denied.
+    sddl = f"D:(A;;GA;;;{sid_str})(A;;GA;;;SY)"
+    security_descriptor, _ = win32security.ConvertStringSecurityDescriptorToSecurityDescriptor(
+        sddl, win32security.SDDL_REVISION_1
+    )
+    sa = pywintypes.SECURITY_ATTRIBUTES()
+    sa.SECURITY_DESCRIPTOR = security_descriptor
+    return sa
 
 
 class ExtensionBridge(QObject):
@@ -138,6 +172,14 @@ class ExtensionServer:
         import win32file
         import win32pipe
 
+        try:
+            pipe_sa = _pipe_security_attributes()
+        except pywintypes.error:
+            # Fail closed — better no pipe at all than one with a default,
+            # unrestricted DACL.
+            logger.exception("ExtensionServer: could not build restricted pipe security descriptor")
+            return
+
         while not self._stop:
             try:
                 handle = win32pipe.CreateNamedPipe(
@@ -145,7 +187,7 @@ class ExtensionServer:
                     win32pipe.PIPE_ACCESS_DUPLEX,
                     win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
                     win32pipe.PIPE_UNLIMITED_INSTANCES,
-                    _PIPE_BUFFER_SIZE, _PIPE_BUFFER_SIZE, 0, None,
+                    _PIPE_BUFFER_SIZE, _PIPE_BUFFER_SIZE, 0, pipe_sa,
                 )
             except pywintypes.error:
                 logger.exception("ExtensionServer: CreateNamedPipe failed")

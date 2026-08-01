@@ -30,6 +30,10 @@ local/
 *.tmp.*
 *.log
 
+# Generated from resources/icon.png by gen_extension_icons.py — regenerate,
+# don't commit
+extension/icons/
+
 # Pipeline working notes (stored in SilverBullet, not repo)
 WORKING.md
 CLAUDE.md

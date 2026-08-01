@@ -7,8 +7,11 @@ Firefox uses `allowed_extensions`) and points each browser's
 `NativeMessagingHosts` registry key at the correct one. Idempotent and
 cheap — safe to call on every app startup.
 
-The Chrome/Edge extension ID is pinned via a fixed keypair (`"key"` in
-extension/manifest.json). The Firefox addon ID is pinned via
+Two Chrome/Edge extension IDs are allowed (see EXTENSION_IDS below): the
+dev-mode/unpacked one pinned via a fixed keypair (`"key"` in
+extension/manifest.json), and the Chrome Web Store one Google assigns on
+publish (the "key" field is stripped before every store upload, so the
+store ID doesn't match the dev-mode one). The Firefox addon ID is pinned via
 `browser_specific_settings.gecko.id` in the Firefox build of the manifest.
 """
 
@@ -22,7 +25,17 @@ import sys
 logger = logging.getLogger(__name__)
 
 HOST_NAME       = "com.sesame.pass"
-EXTENSION_ID    = "gkfncbifphnljdllbcophdpndkpdlnpi"   # Chrome/Edge — derived from "key" in manifest.json
+# Chrome/Edge extension IDs allowed to connect — two different IDs because
+# Chrome computes the ID differently depending on how the extension got
+# installed: the "key" field is stripped before every Web Store upload
+# (emake.ps1 does this — the store doesn't allow a pinned key), so the
+# published listing gets a store-assigned ID that has nothing to do with the
+# dev-mode ID computed from that key. Both must be listed or one install
+# path can never talk to Sesame.
+EXTENSION_IDS = [
+    "gkfncbifphnljdllbcophdpndkpdlnpi",   # dev-mode/unpacked — derived from "key" in manifest.json
+    "fodejgdgiblhbcgobpafejgammblelje",   # Chrome Web Store — assigned by Google on publish
+]
 FIREFOX_ADDON_ID = "sesame-pass@szm"                   # Firefox — set in browser_specific_settings.gecko.id
 
 # (hive, subkey, manifest_variant) where variant is "chrome" or "firefox"
@@ -89,7 +102,7 @@ def ensure_native_host_registered() -> None:
             "description": "Sesame Pass native bridge",
             "path": exe_path,
             "type": "stdio",
-            "allowed_origins": [f"chrome-extension://{EXTENSION_ID}/"],
+            "allowed_origins": [f"chrome-extension://{eid}/" for eid in EXTENSION_IDS],
         },
         "firefox": {
             "name": HOST_NAME,

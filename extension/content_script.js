@@ -1,7 +1,27 @@
-// Sesame Pass — content script: on focus of a username/password field, offer
-// to fill it from a matching Sesame entry. Field-mapping (which input on
-// this domain is username vs password) is learned and kept entirely in
-// chrome.storage.local — Sesame's backend never sees it.
+// Sesame Pass — content script: on double-click of a username/password
+// field, offer to fill it from a matching Sesame entry.
+//
+// Trigger is double-click, not focus. A plain focus/single-click already
+// makes the browser's own built-in password manager show its native
+// "choose saved password" dropdown on many sites, which visually competes
+// with (and can render on top of / block) our own suggestion UI. Focus
+// happens on every tab-through or click; double-click is a distinct,
+// deliberate action that doesn't fire on ordinary navigation, so it mostly
+// sidesteps that collision (not a full fix — the native dropdown is outside
+// our control and can still appear from the plain click half of the
+// double-click — just a pragmatic reduction).
+//
+// Each matching entry offers ONE guessed button by default — 👤 for a
+// plain text-like field, 🔑 for a field whose current `type` attribute is
+// "password" — same guess as before. That guess can be wrong: many sites
+// put their own show/hide toggle on the password field, which flips
+// `type="password"` -> `type="text"` when revealed, so a field that is
+// still, semantically, the password field can look like a plain text field
+// by the time you interact with it again. Escape hatch: while the tooltip
+// is open, holding Shift reveals the *other* button for every row too, so
+// you can force-paste the field the guess got wrong — live, with nothing
+// remembered between visits (no chrome.storage.local field-mapping cache
+// anymore; this replaces that).
 //
 // All communication with Sesame goes through the background service worker
 // (Native Messaging — see background.js) via chrome.runtime.sendMessage;
@@ -9,37 +29,27 @@
 // no more pairing code/port/bearer-token to track here — "liveness" is just
 // "did the background relay get a response at all".
 //
-// The browser's own built-in password manager also reacts to focus on these
-// same fields and shows its native "choose saved password" dropdown, which
-// visually competes with (and can render on top of / block) our own
-// suggestion UI. Best-effort mitigation only (per explicit product decision —
-// showing the picker immediately on focus matters more than dodging this
-// collision): on first encountering a field, mark autocomplete
-// "off"/"new-password" and briefly toggle `readonly` on focus, a well-known
-// trick that suppresses the native suggestion dropdown for that focus event.
-// Not 100% guaranteed (browsers keep tightening this) and does not fully
-// eliminate the collision.
+// suppressNativeAutofill() (below) stays focus-triggered, independent of
+// the double-click tooltip trigger — it's a best-effort attempt to preempt
+// the browser's native dropdown, and has to run on the very first focus,
+// before that dropdown would otherwise appear.
 
 (() => {
   const FILLABLE_TYPES = new Set(["text", "email", "password", "tel", "", null]);
-  const PING_CACHE_MS = 10_000;      // don't re-check liveness on every focus
+  const PING_CACHE_MS = 10_000;      // don't re-check liveness on every double-click
 
   let tooltipEl = null;
   let tooltipForEl = null;
   const handledFields = new WeakSet();
   let lastLivenessCheck = 0;
   let cachedLiveness = null;   // { running: bool }
+  let shiftKeyHandler = null;
+  let outsideClickHandler = null;
+  let escapeKeyHandler = null;
 
   function isFillableInput(el) {
     if (!(el instanceof HTMLInputElement)) return false;
     return FILLABLE_TYPES.has((el.getAttribute("type") || "").toLowerCase());
-  }
-
-  function fieldKeyFor(el) {
-    if (el.name) return `name:${el.name}`;
-    if (el.id) return `id:${el.id}`;
-    const all = Array.from(document.querySelectorAll("input"));
-    return `idx:${all.indexOf(el)}`;
   }
 
   // Best-effort suppression of the browser's own native suggestion dropdown
@@ -84,7 +94,62 @@
     return cachedLiveness;
   }
 
+  // While the tooltip is open, Shift reveals every row's hidden "other"
+  // button (see buildEntryRows); released, they hide again. Scoped to the
+  // tooltip's lifetime — attached in showTooltip(), detached in
+  // removeTooltip() — so there's no page-global Shift listener sitting
+  // around when no tooltip exists.
+  function attachShiftReveal() {
+    shiftKeyHandler = (ev) => {
+      if (ev.key !== "Shift" || !tooltipEl) return;
+      const show = ev.type === "keydown";
+      tooltipEl.querySelectorAll('[data-shift-reveal="1"]').forEach((btn) => {
+        btn.style.display = show ? "inline-block" : "none";
+      });
+    };
+    document.addEventListener("keydown", shiftKeyHandler);
+    document.addEventListener("keyup", shiftKeyHandler);
+  }
+
+  function detachShiftReveal() {
+    if (!shiftKeyHandler) return;
+    document.removeEventListener("keydown", shiftKeyHandler);
+    document.removeEventListener("keyup", shiftKeyHandler);
+    shiftKeyHandler = null;
+  }
+
+  // Dismiss on a click outside the tooltip/anchor field, or on Escape.
+  // Replaces the old focus-tied dismissal, which no longer maps cleanly to
+  // "user is done" now that showing is double-click-triggered rather than
+  // focus-triggered (the field stays focused after a fill, and
+  // double-clicking an already-focused field doesn't refire focus).
+  function attachDismissListeners() {
+    outsideClickHandler = (ev) => {
+      if (tooltipEl && !tooltipEl.contains(ev.target) && ev.target !== tooltipForEl) {
+        removeTooltip();
+      }
+    };
+    escapeKeyHandler = (ev) => {
+      if (ev.key === "Escape" && tooltipEl) removeTooltip();
+    };
+    document.addEventListener("mousedown", outsideClickHandler, true);
+    document.addEventListener("keydown", escapeKeyHandler);
+  }
+
+  function detachDismissListeners() {
+    if (outsideClickHandler) {
+      document.removeEventListener("mousedown", outsideClickHandler, true);
+      outsideClickHandler = null;
+    }
+    if (escapeKeyHandler) {
+      document.removeEventListener("keydown", escapeKeyHandler);
+      escapeKeyHandler = null;
+    }
+  }
+
   function removeTooltip() {
+    detachShiftReveal();
+    detachDismissListeners();
     if (tooltipEl) {
       tooltipEl.remove();
       tooltipEl = null;
@@ -117,6 +182,8 @@
     contentBuilder(tooltipEl);
     document.body.appendChild(tooltipEl);
     positionTooltip(anchor);
+    attachShiftReveal();
+    attachDismissListeners();
   }
 
   function warningTooltip(anchor, message) {
@@ -151,24 +218,57 @@
     removeTooltip();
   }
 
-  async function saveMapping(domain, fieldKey, field) {
-    const { fieldMap } = await chrome.storage.local.get(["fieldMap"]);
-    const map = fieldMap || {};
-    map[domain] = map[domain] || {};
-    map[domain][fieldKey] = field;
-    await chrome.storage.local.set({ fieldMap: map });
+  // One row per matching entry. Each row gets its guessed button (based on
+  // the field's current `type`, same heuristic as before) visible right
+  // away, plus the other button hidden — only shown while Shift is held
+  // (see attachShiftReveal). Never offer a hidden 👤 button for an entry
+  // with no username.
+  function buildEntryRows(root, el, entries) {
+    const elType = (el.getAttribute("type") || "text").toLowerCase();
+
+    entries.forEach((entry) => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex; gap:4px; align-items:center; margin:2px 0;";
+      const label = document.createElement("span");
+      label.textContent = entry.name;
+      label.style.cssText = "flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+      row.appendChild(label);
+
+      let guessed;
+      if (elType === "password") {
+        guessed = "password";
+      } else if (entry.has_username) {
+        guessed = "username";
+      } else {
+        guessed = "password";
+      }
+      const other = guessed === "username" ? "password" : "username";
+
+      const makeButton = (field, hiddenByDefault) => {
+        const btn = document.createElement("button");
+        btn.textContent = field === "username" ? "👤" : "🔑";
+        btn.title = `Fill ${field}`;
+        btn.style.cssText =
+          "cursor:pointer; background:#5865f2; color:#fff; border:none; border-radius:4px; padding:2px 6px;" +
+          (hiddenByDefault ? " display:none;" : "");
+        if (hiddenByDefault) btn.dataset.shiftReveal = "1";
+        btn.addEventListener("mousedown", async (ev) => {
+          ev.preventDefault(); // keep the field focused
+          ev.stopPropagation();
+          await fillField(el, entry.id, field);
+        });
+        return btn;
+      };
+
+      row.appendChild(makeButton(guessed, false));
+      if (other !== "username" || entry.has_username) {
+        row.appendChild(makeButton(other, true));
+      }
+      root.appendChild(row);
+    });
   }
 
-  async function getMapping(domain, fieldKey) {
-    const { fieldMap } = await chrome.storage.local.get(["fieldMap"]);
-    return fieldMap?.[domain]?.[fieldKey];
-  }
-
-  // Runs directly on focus — liveness/pairing check first (cached, see
-  // checkLiveness) so most focuses resolve instantly, then shows the
-  // suggestion tooltip right away per product decision (see file header for
-  // the native-dropdown collision tradeoff this accepts).
-  async function onFieldFocus(el) {
+  async function onFieldActivate(el) {
     const liveness = await checkLiveness();
 
     if (!liveness.running) {
@@ -185,46 +285,7 @@
       return;
     }
 
-    const fieldKey = fieldKeyFor(el);
-    const known = await getMapping(domain, fieldKey);
-
-    showTooltip(el, (root) => {
-      entries.forEach((entry) => {
-        const row = document.createElement("div");
-        row.style.cssText = "display:flex; gap:4px; align-items:center; margin:2px 0;";
-        const label = document.createElement("span");
-        label.textContent = entry.name;
-        label.style.cssText = "flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
-        row.appendChild(label);
-
-        const elType = (el.getAttribute("type") || "text").toLowerCase();
-        let fieldsToOffer;
-        if (known) {
-          fieldsToOffer = [known];
-        } else if (elType === "password") {
-          fieldsToOffer = ["password"];
-        } else if (entry.has_username) {
-          fieldsToOffer = ["username"]; // non-password field — only username makes sense here
-        } else {
-          fieldsToOffer = ["password"];
-        }
-        fieldsToOffer.forEach((field) => {
-          const btn = document.createElement("button");
-          btn.textContent = field === "username" ? "👤" : "🔑";
-          btn.title = `Fill ${field}`;
-          btn.style.cssText =
-            "cursor:pointer; background:#5865f2; color:#fff; border:none; border-radius:4px; padding:2px 6px;";
-          btn.addEventListener("mousedown", async (ev) => {
-            ev.preventDefault(); // keep the field focused
-            ev.stopPropagation();
-            await saveMapping(domain, fieldKey, field);
-            await fillField(el, entry.id, field);
-          });
-          row.appendChild(btn);
-        });
-        root.appendChild(row);
-      });
-    });
+    showTooltip(el, (root) => buildEntryRows(root, el, entries));
   }
 
   document.addEventListener(
@@ -232,25 +293,20 @@
     (ev) => {
       if (isFillableInput(ev.target)) {
         suppressNativeAutofill(ev.target);
-        onFieldFocus(ev.target);
       }
     },
     true
   );
 
-  document.addEventListener("focusout", (ev) => {
-    const target = ev.target;
-    if (target !== tooltipForEl) return;
-    // Small delay so a mousedown on the tooltip's fill buttons isn't
-    // dismissed by the input losing focus first (those buttons already call
-    // preventDefault on mousedown to avoid this, but scroll/other blur
-    // sources are still handled here). Re-check tooltipForEl at fire time —
-    // tabbing straight to the next fillable field already reassigned it to
-    // that field's tooltip, which must survive.
-    setTimeout(() => {
-      if (tooltipForEl === target) removeTooltip();
-    }, 150);
-  });
+  document.addEventListener(
+    "dblclick",
+    (ev) => {
+      if (isFillableInput(ev.target)) {
+        onFieldActivate(ev.target);
+      }
+    },
+    true
+  );
 
   // Keep the tooltip aligned with its field across scrolling/resizing while
   // it's shown; cheap since it only runs while a tooltip exists.

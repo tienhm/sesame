@@ -82,7 +82,6 @@ def parse_bitwarden_json(
             "category":      category,
             "tags":          [],
             "url":           url,
-            "auto_login_ms": 0,
             "has_otp":       bool(totp_raw),
         })
         secrets[key] = password

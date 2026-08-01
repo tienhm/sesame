@@ -7,6 +7,18 @@ Set-Location $PSScriptRoot
 Add-Type -Assembly "System.IO.Compression"
 Add-Type -Assembly "System.IO.Compression.FileSystem"
 
+if (-not (Test-Path ".venv\Scripts\Activate.ps1")) {
+    Write-Error "Venv not found. Run: python -m venv .venv && .venv\Scripts\pip install -r requirements.txt"
+    exit 1
+}
+. .\.venv\Scripts\Activate.ps1
+Write-Host "Generating extension icons from resources/icon.png..." -ForegroundColor Cyan
+python gen_extension_icons.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Icon generation failed (exit $LASTEXITCODE)." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
 function Compress-WithForwardSlashes($sourceDir, $destFile) {
     $sourceDir = (Resolve-Path $sourceDir).Path
     # .NET resolves relative paths against Environment.CurrentDirectory, not PS $PWD.
@@ -20,9 +32,9 @@ function Compress-WithForwardSlashes($sourceDir, $destFile) {
     $zip.Dispose()
 }
 
-$verLine = Select-String -Path main.py -Pattern '__version__\s*=\s*"([^"]+)"'
-$version = $verLine.Matches[0].Groups[1].Value   # e.g. "1.6"
-$semver  = "$version.0"                           # "1.6.0" for manifest
+# The extension has its own version, independent of the main app's — read
+# from extension/manifest.json (the source of truth) rather than main.py.
+$version = (Get-Content "extension\manifest.json" -Raw | ConvertFrom-Json).version   # e.g. "1.6.1"
 
 Write-Host "Packaging Sesame Pass extension v$version" -ForegroundColor Cyan
 
@@ -41,7 +53,6 @@ function Make-Package($browser, $outName, $unpack = $false) {
     else                         { $baseMf = "$tmp\manifest.json" }
 
     $mf = Get-Content $baseMf -Raw | ConvertFrom-Json
-    $mf.version = $semver
     $mf.PSObject.Properties.Remove("key")   # not allowed by Chrome/Edge Web Store
     $mf | ConvertTo-Json -Depth 10 | Set-Content "$tmp\manifest.json" -Encoding utf8
     Remove-Item "$tmp\manifest-ff.json" -ErrorAction SilentlyContinue

@@ -53,9 +53,6 @@ _PROTECTED_CONFIG = {
     # Roaming bubble
     "roam_delay_ms": 3_000,
     "roam_interval_ms": 5_000,
-
-    # Auto-login keystroke delay
-    "auto_login_inter_key_delay_s": 0.012,
 }
 
 

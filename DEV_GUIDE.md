@@ -342,8 +342,7 @@ sesame/
 │       ├── movement_reminder.py # Movement reminder timer
 │       ├── otp_import.py    # Parse otpauth:// and migration URIs
 │       ├── startup.py       # Windows startup registry helper
-│       ├── vault_io.py      # AES-256-GCM encryption for export
-│       └── auto_login.py    # Keystroke injection for auto-login
+│       └── vault_io.py      # AES-256-GCM encryption for export
 ├── resources/
 │   ├── icon.png
 │   ├── style.qss            # Dark theme stylesheet

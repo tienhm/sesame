@@ -12,7 +12,6 @@ class Entry:
     category: str
     tags: list[str] = field(default_factory=list)
     url: str = ""
-    auto_login_ms: int = 0
     has_otp: bool = False  # True when an OTP secret is stored in Credential Manager
     id: str = ""
 
@@ -28,7 +27,6 @@ class Entry:
             "category": self.category,
             "tags": self.tags,
             "url": self.url,
-            "auto_login_ms": self.auto_login_ms,
             "has_otp": self.has_otp,
         }
 
@@ -39,11 +37,6 @@ class Entry:
 
         category = data.get("category", "General") or "General"
 
-        try:
-            auto_login_ms = max(0, int(data.get("auto_login_ms") or 0))
-        except (TypeError, ValueError):
-            auto_login_ms = 0
-
         return cls(
             id=data["id"],
             name=data["name"],
@@ -51,7 +44,6 @@ class Entry:
             category=category,
             tags=tags,
             url=data.get("url", ""),
-            auto_login_ms=auto_login_ms,
             has_otp=bool(data.get("has_otp") or data.get("otp_secret")),
         )
 

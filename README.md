@@ -24,7 +24,6 @@ To run or build from source, see [`DEV_GUIDE.md`](DEV_GUIDE.md).
 - **Vault panel** — real-time search, category filter, and tag filter
 - **Tags** — attach multiple comma-separated tags to each entry; filter by one or more tags (AND logic)
 - **URL** — optional per entry; a small link icon opens the default browser
-- **Auto-login** — set a delay per entry; after opening the URL, Sesame injects `username → TAB → password` as keystrokes (Windows only)
 - **OTP / TOTP** — store a base32 TOTP secret per entry; live 6-digit code shown in the entry row, updated every second
 - **Movement reminder** — configurable idle timer blinks the bubble orange to remind you to move; click to confirm or snooze
 - **Copy to clipboard** — copy username or password; passwords auto-clear after 30 seconds and are excluded from Windows Clipboard History (Win+V)

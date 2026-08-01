@@ -15,6 +15,20 @@ const NATIVE_HOST_NAME = "com.sesame.pass";
 const ALARM_NAME = "sesame-heartbeat";
 const NATIVE_TIMEOUT_MS = 3000;
 
+// Toolbar icon reflects live connection state: colored while Sesame answers
+// pings, gray otherwise. manifest.json's default_icon is already the gray
+// set, so a worker that hasn't run its first heartbeat yet (or a Sesame
+// that's actually down) shows "disconnected" rather than lying "connected".
+const ICON_CONNECTED    = { 16: "icons/icon16.png",      32: "icons/icon32.png",      48: "icons/icon48.png" };
+const ICON_DISCONNECTED = { 16: "icons/gray/icon16.png", 32: "icons/gray/icon32.png", 48: "icons/gray/icon48.png" };
+let lastIconConnected = null; // avoid redundant setIcon calls on every heartbeat
+
+function setConnectedIcon(connected) {
+  if (lastIconConnected === connected) return;
+  lastIconConnected = connected;
+  chrome.action.setIcon({ path: connected ? ICON_CONNECTED : ICON_DISCONNECTED });
+}
+
 // Sends exactly one message over a fresh native connection and resolves with
 // the one response — mirrors the old single fetch()-per-request model, so
 // callers don't have to deal with connectNative's persistent-port semantics
@@ -93,7 +107,8 @@ sendHeartbeat();
 
 async function sendHeartbeat() {
   const { browser } = await chrome.storage.local.get(["browser"]);
-  await nativeRequest({ type: "ping", browser: browser || await guessBrowser() });
+  const response = await nativeRequest({ type: "ping", browser: browser || await guessBrowser() });
+  setConnectedIcon(!!(response && response.ok));
 }
 
 async function guessBrowser() {

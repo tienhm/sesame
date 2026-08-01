@@ -2,6 +2,17 @@
 # Load that folder in about:debugging (any file inside will do).
 Set-Location $PSScriptRoot
 
+if (-not (Test-Path ".venv\Scripts\Activate.ps1")) {
+    Write-Error "Venv not found. Run: python -m venv .venv && .venv\Scripts\pip install -r requirements.txt"
+    exit 1
+}
+. .\.venv\Scripts\Activate.ps1
+python gen_extension_icons.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Icon generation failed (exit $LASTEXITCODE)." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
 $ffDev = "dist\ext\firefox-dev"
 Remove-Item -Recurse -Force $ffDev -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $ffDev | Out-Null
