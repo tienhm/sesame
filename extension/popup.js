@@ -1,13 +1,14 @@
-// Sesame Pass — popup: auto-detect browser, show connection status.
-// No manual browser selector — guessBrowser() reads the UA and stores
-// the result in storage so the background heartbeat uses the same value.
+const titleEl      = document.getElementById("title");
+const statusEl     = document.getElementById("status");
+const statusTextEl = document.getElementById("status-text");
 
-const browserInfoEl = document.getElementById("browser-info");
-const statusEl      = document.getElementById("status");
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
-function setStatus(text, ok) {
-  statusEl.textContent = text;
-  statusEl.className = ok ? "ok" : "err";
+function appVersion() {
+  const v = chrome.runtime.getManifest().version; // e.g. "1.6.0"
+  return "v" + v.replace(/\.0$/, "");             // → "v1.6"
 }
 
 async function guessBrowser() {
@@ -15,7 +16,6 @@ async function guessBrowser() {
   if (ua.includes("Firefox/")) return "firefox";
   if (ua.includes("Edg/"))     return "edge";
   if (ua.includes("OPR/"))     return "opera";
-  // Brave removes itself from the UA string — must use navigator.brave API.
   if (navigator.brave && await navigator.brave.isBrave()) return "brave";
   return "chrome";
 }
@@ -32,15 +32,16 @@ function sendToBackground(message) {
 async function init() {
   const browser = await guessBrowser();
   await chrome.storage.local.set({ browser });
-  browserInfoEl.textContent = `Browser: ${browser}`;
+
+  titleEl.textContent = `Sesame ${capitalize(browser)} Pass`;
 
   const response = await sendToBackground({ type: "ping", browser });
-  setStatus(
-    response && response.ok
-      ? "Connected — Sesame is running."
-      : "Sesame not detected — make sure it's running.",
-    !!(response && response.ok)
-  );
+  const ok = !!(response && response.ok);
+
+  statusEl.className = ok ? "ok" : "err";
+  statusTextEl.textContent = ok
+    ? "Connected"
+    : `Disconnected - Open Sesame ${appVersion()}`;
 }
 
 init();

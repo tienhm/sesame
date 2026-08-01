@@ -25,7 +25,8 @@ function Make-Package($browser, $outFile) {
     Copy-Item "$src\*" $tmp -Recurse
 
     # Firefox uses its own manifest; Chrome/Edge use the main one.
-    $baseMf = if ($browser -eq "firefox") "$src\manifest-ff.json" else "$tmp\manifest.json"
+    if ($browser -eq "firefox") { $baseMf = "$src\manifest-ff.json" }
+    else                         { $baseMf = "$tmp\manifest.json" }
     $mf = Get-Content $baseMf -Raw | ConvertFrom-Json
     $mf.version = $semver
     $mf | ConvertTo-Json -Depth 10 | Set-Content "$tmp\manifest.json" -Encoding utf8
@@ -33,10 +34,13 @@ function Make-Package($browser, $outFile) {
     # manifest-ff.json must not ship inside the Firefox package itself
     Remove-Item "$tmp\manifest-ff.json" -ErrorAction SilentlyContinue
 
-    # Zip into output file
+    # Zip into output file (.xpi is a renamed .zip — create as .zip then rename)
     $fullOut = "$outDir\$outFile"
+    $tmpZip  = "$outDir\_pkg.zip"
     Remove-Item $fullOut -ErrorAction SilentlyContinue
-    Compress-Archive -Path "$tmp\*" -DestinationPath $fullOut
+    Remove-Item $tmpZip  -ErrorAction SilentlyContinue
+    Compress-Archive -Path "$tmp\*" -DestinationPath $tmpZip
+    Rename-Item $tmpZip $outFile
     Write-Host "  $fullOut" -ForegroundColor Green
 }
 

@@ -5,7 +5,7 @@
   <title>Sesame Pass</title>
   <style>
     body {
-      width: 260px;
+      width: 240px;
       font-family: "Segoe UI", sans-serif;
       background: #1e1f26;
       color: #e8eaed;
@@ -14,26 +14,30 @@
     }
     h1 {
       font-size: 14px;
-      margin: 0 0 10px;
-    }
-    #browser-info {
-      font-size: 11px;
-      color: #adb5bd;
-      margin-bottom: 8px;
+      margin: 0 0 8px;
     }
     #status {
-      font-size: 11px;
-      margin-top: 6px;
-      word-break: break-word;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .ok { color: #2d6a4f; }
-    .err { color: #e74c3c; }
+    #bullet {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ok   #bullet { background: #2ecc71; }
+    .err  #bullet { background: #e74c3c; }
   </style>
 </head>
 <body>
-  <h1>🔑 Sesame Pass</h1>
-  <div id="browser-info"></div>
-  <div id="status">Checking…</div>
+  <h1 id="title">Sesame Pass</h1>
+  <div id="status">
+    <div id="bullet"></div>
+    <span id="status-text">Checking…</span>
+  </div>
 
   <script src="popup.js"></script>
 </body>
