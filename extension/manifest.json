@@ -3,6 +3,7 @@
   "name": "Sesame Pass",
   "version": "0.1.0",
   "description": "Auto-fill usernames and passwords from Sesame into web forms.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsJz6GCfwqyjHDh15X/TWY6wT1rk0oD+19FsQao/TvmnG868OB2XxYy8caOGAOrOle23Xb5HQDExOU6+cNtDQ9rsOtue3hY3wgilvAtGZcOdQb/NS7rjczv4LqDz1ihPjc4s+x6t7/qLa5vEvJ/7rkv4QlEWDU82ysE1SmieYB1pu1kdZpnyBxj92dF5D9Pu0e+VcHkKY+z/zQvW1YXE5dmWIr/L1AEvn7MOsA4aFzYcM/aDh5q1faHSuaict3FVxenMvRpf90lc4S1UUgSOI213ZkhPy7AfMS+Z9HO518Ny1zTqm4aXRe0C92QQQOVAkxEzdiVHvd+56RgGtB/sOBwIDAQAB",
   "action": {
     "default_popup": "popup.html",
     "default_title": "Sesame Pass"
@@ -17,6 +18,5 @@
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage", "alarms"],
-  "host_permissions": ["http://127.0.0.1/*"]
+  "permissions": ["storage", "alarms", "nativeMessaging"]
 }

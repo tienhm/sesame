@@ -34,6 +34,7 @@ from app.utils.clipboard import ClipboardManager
 from app.utils.extension_server import ExtensionServer
 from app.utils.lock_manager import LockManager
 from app.utils.movement_reminder import MovementReminder
+from app.utils.native_host_registration import ensure_native_host_registered
 from app.utils.startup import ensure_startup_enabled
 from app.utils.vault_io import export_vault, import_vault
 from app.vault_panel import VaultPanel
@@ -102,6 +103,7 @@ class SesameApp:
         self._clipboard = ClipboardManager(self._config)
         self._lock_mgr = LockManager(self._config)
         self._icon = _make_icon()
+        ensure_native_host_registered()
         self._extension_server = ExtensionServer(self._config, self._vault, self._lock_mgr)
 
         self._panel = VaultPanel(self._vault, self._clipboard, self._lock_mgr, self._config)

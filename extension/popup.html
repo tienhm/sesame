@@ -22,7 +22,7 @@
       color: #adb5bd;
       margin-bottom: 4px;
     }
-    select, textarea, button {
+    select {
       width: 100%;
       box-sizing: border-box;
       background: #2e2f3a;
@@ -32,19 +32,6 @@
       padding: 6px;
       font-size: 12px;
       margin-bottom: 8px;
-    }
-    textarea {
-      resize: vertical;
-      min-height: 48px;
-      font-family: monospace;
-    }
-    button {
-      cursor: pointer;
-      background: #5865f2;
-      border: none;
-    }
-    button:hover {
-      background: #4752c4;
     }
     #status {
       font-size: 11px;
@@ -67,11 +54,7 @@
     <option value="firefox">Firefox</option>
   </select>
 
-  <label for="code-input">Pairing code (from Sesame Settings → Extensions)</label>
-  <textarea id="code-input" placeholder="Paste pairing code here"></textarea>
-
-  <button id="pair-btn">Pair</button>
-  <div id="status"></div>
+  <div id="status">Checking…</div>
 
   <script src="popup.js"></script>
 </body>

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QPoint, QRect, QTimer, Signal
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -858,44 +857,13 @@ class SettingsDialog(QDialog):
 
         intro = QLabel(
             "Sesame Pass is a browser extension that auto-fills username/"
-            "password into web forms. Pair each browser once below."
+            "password into web forms. Install it below — Sesame detects it "
+            "automatically via your browser's Native Messaging, no pairing "
+            "code needed."
         )
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #adb5bd; font-size: 11px;")
         layout.addWidget(intro)
-
-        code_label = QLabel("Pairing code")
-        code_label.setStyleSheet("font-weight: 600; color: #e8eaed;")
-        layout.addWidget(code_label)
-
-        code_row = QHBoxLayout()
-        self._ext_code_edit = QLineEdit()
-        self._ext_code_edit.setReadOnly(True)
-        self._ext_code_edit.setText(
-            self._extension_server.pairing_code if self._extension_server else ""
-        )
-        copy_btn = QPushButton("Copy")
-        copy_btn.clicked.connect(self._on_copy_pairing_code)
-        regen_btn = QPushButton("Regenerate…")
-        regen_btn.clicked.connect(self._on_regenerate_pairing_code)
-        regen_btn.setEnabled(self._extension_server is not None)
-        copy_btn.setEnabled(self._extension_server is not None)
-        code_row.addWidget(self._ext_code_edit, stretch=1)
-        code_row.addWidget(copy_btn)
-        code_row.addWidget(regen_btn)
-        layout.addLayout(code_row)
-
-        hint = QLabel(
-            "Paste this once into the Sesame Pass extension popup. Treat it "
-            "like a password — anyone with it can read entries via the "
-            "extension."
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: #adb5bd; font-size: 11px;")
-        layout.addWidget(hint)
-
-        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
-        layout.addWidget(sep)
 
         browsers_label = QLabel("Detected browsers")
         browsers_label.setStyleSheet("font-weight: 600; color: #e8eaed;")
@@ -957,25 +925,6 @@ class SettingsDialog(QDialog):
                 status_lbl.setText("Not paired")
 
     def _on_extension_heartbeat(self, browser: str) -> None:
-        self._refresh_extension_rows()
-
-    def _on_copy_pairing_code(self) -> None:
-        QApplication.clipboard().setText(self._ext_code_edit.text())
-
-    def _on_regenerate_pairing_code(self) -> None:
-        if not self._extension_server:
-            return
-        reply = QMessageBox.question(
-            self,
-            "Regenerate Pairing Code",
-            "Any browser extension already paired will stop working until "
-            "you paste the new code into it. Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        self._extension_server.regenerate()
-        self._ext_code_edit.setText(self._extension_server.pairing_code)
         self._refresh_extension_rows()
 
     def _on_show_install_instructions(self) -> None:

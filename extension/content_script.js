@@ -3,6 +3,12 @@
 // this domain is username vs password) is learned and kept entirely in
 // chrome.storage.local — Sesame's backend never sees it.
 //
+// All communication with Sesame goes through the background service worker
+// (Native Messaging — see background.js) via chrome.runtime.sendMessage;
+// content scripts can't call chrome.runtime.connectNative directly. There's
+// no more pairing code/port/bearer-token to track here — "liveness" is just
+// "did the background relay get a response at all".
+//
 // The browser's own built-in password manager also reacts to focus on these
 // same fields and shows its native "choose saved password" dropdown, which
 // visually competes with (and can render on top of / block) our own
@@ -17,14 +23,12 @@
 (() => {
   const FILLABLE_TYPES = new Set(["text", "email", "password", "tel", "", null]);
   const PING_CACHE_MS = 10_000;      // don't re-check liveness on every focus
-  const PORT_SCAN_COUNT = 20;        // matches Sesame's own bind-scan range
-  const FIRST_PORT = 37821;
 
   let tooltipEl = null;
   let tooltipForEl = null;
   const handledFields = new WeakSet();
   let lastLivenessCheck = 0;
-  let cachedLiveness = null;   // { paired: bool, running: bool, port: number|null }
+  let cachedLiveness = null;   // { running: bool }
 
   function isFillableInput(el) {
     if (!(el instanceof HTMLInputElement)) return false;
@@ -53,25 +57,20 @@
     });
   }
 
-  async function pingPort(port, timeoutMs = 800) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-      const resp = await fetch(`http://127.0.0.1:${port}/ping`, { signal: ctrl.signal });
-      clearTimeout(timer);
-      return resp.ok;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Not paired yet: we don't know Sesame's port, so probe the same range
-  // Sesame itself scans when binding. Only used to decide silent vs.
-  // "please pair" — never used to read data (that always requires the code).
-  async function probeAnyRunning() {
-    const ports = Array.from({ length: PORT_SCAN_COUNT }, (_, i) => FIRST_PORT + i);
-    const results = await Promise.all(ports.map((p) => pingPort(p, 500)));
-    return results.some(Boolean);
+  // Relays a request to the background service worker, which owns the
+  // actual Native Messaging connection to Sesame (see background.js).
+  // Resolves to null — never rejects — if Sesame/the relay is unreachable,
+  // so every caller can treat "no response" as "not running".
+  function sendToBackground(message) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(response);
+      });
+    });
   }
 
   async function checkLiveness() {
@@ -80,15 +79,8 @@
       return cachedLiveness;
     }
     lastLivenessCheck = now;
-
-    const { code, port } = await chrome.storage.local.get(["code", "port"]);
-    if (code && port) {
-      const running = await pingPort(port);
-      cachedLiveness = { paired: true, running, port };
-    } else {
-      const running = await probeAnyRunning();
-      cachedLiveness = { paired: false, running, port: null };
-    }
+    const response = await sendToBackground({ type: "ping" });
+    cachedLiveness = { running: !!(response && response.ok) };
     return cachedLiveness;
   }
 
@@ -147,32 +139,16 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  async function fillField(el, entryId, field, port, code) {
-    try {
-      const resp = await fetch(`http://127.0.0.1:${port}/reveal`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${code}`,
-        },
-        body: JSON.stringify({ entry_id: entryId, field }),
-      });
-      if (resp.status === 401) {
-        warningTooltip(el, "Pairing key changed — re-pair in the extension popup");
-        return;
-      }
-      if (resp.status === 423) {
-        warningTooltip(el, "That entry is locked in Sesame — unlock it there first");
-        return;
-      }
-      if (!resp.ok) return;
-      const data = await resp.json();
-      setNativeValue(el, data.value || "");
-      removeTooltip();
-    } catch (e) {
-      // Sesame went away mid-request — fail silently, matches the
-      // "not running" = silent rule.
+  async function fillField(el, entryId, field) {
+    const response = await sendToBackground({ type: "reveal", entry_id: entryId, field });
+    if (!response) return; // Sesame went away mid-request — fail silently.
+    if (response.error === "locked") {
+      warningTooltip(el, "That entry is locked in Sesame — unlock it there first");
+      return;
     }
+    if (response.error) return; // not_found/invalid_field — nothing sensible to show.
+    setNativeValue(el, response.value || "");
+    removeTooltip();
   }
 
   async function saveMapping(domain, fieldKey, field) {
@@ -200,29 +176,9 @@
       return;
     }
 
-    if (!liveness.paired) {
-      warningTooltip(el, "Please pair with Sesame — open the extension popup");
-      return;
-    }
-
-    const { code, port } = await chrome.storage.local.get(["code", "port"]);
     const domain = location.hostname;
-
-    let entries;
-    try {
-      const resp = await fetch(
-        `http://127.0.0.1:${port}/entries?domain=${encodeURIComponent(domain)}`,
-        { headers: { Authorization: `Bearer ${code}` } }
-      );
-      if (resp.status === 401) {
-        warningTooltip(el, "Pairing key changed — re-pair in the extension popup");
-        return;
-      }
-      if (!resp.ok) return;
-      ({ entries } = await resp.json());
-    } catch (e) {
-      return; // Sesame vanished between the ping and this call — silent.
-    }
+    const response = await sendToBackground({ type: "entries", domain });
+    const entries = response && response.entries;
 
     if (!entries || entries.length === 0) {
       removeTooltip();
@@ -262,7 +218,7 @@
             ev.preventDefault(); // keep the field focused
             ev.stopPropagation();
             await saveMapping(domain, fieldKey, field);
-            await fillField(el, entry.id, field, port, code);
+            await fillField(el, entry.id, field);
           });
           row.appendChild(btn);
         });
