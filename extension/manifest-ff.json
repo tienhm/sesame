@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Sesame Pass",
+  "version": "1.6.0",
+  "description": "Auto-fill usernames and passwords from Sesame into web forms.",
+  "browser_specific_settings": {
+    "gecko": { "id": "sesame-pass@szm" }
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Sesame Pass"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage", "alarms", "nativeMessaging"]
+}

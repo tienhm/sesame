@@ -10,12 +10,13 @@ function setStatus(text, ok) {
   statusEl.className = ok ? "ok" : "err";
 }
 
-function guessBrowser() {
+async function guessBrowser() {
   const ua = navigator.userAgent;
+  if (ua.includes("Firefox/")) return "firefox";
   if (ua.includes("Edg/"))     return "edge";
   if (ua.includes("OPR/"))     return "opera";
-  if (ua.includes("Brave/"))   return "brave";
-  if (ua.includes("Firefox/")) return "firefox";
+  // Brave removes itself from the UA string — must use navigator.brave API.
+  if (navigator.brave && await navigator.brave.isBrave()) return "brave";
   return "chrome";
 }
 
@@ -29,7 +30,7 @@ function sendToBackground(message) {
 }
 
 async function init() {
-  const browser = guessBrowser();
+  const browser = await guessBrowser();
   await chrome.storage.local.set({ browser });
   browserInfoEl.textContent = `Browser: ${browser}`;
 

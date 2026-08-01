@@ -93,14 +93,15 @@ sendHeartbeat();
 
 async function sendHeartbeat() {
   const { browser } = await chrome.storage.local.get(["browser"]);
-  await nativeRequest({ type: "ping", browser: browser || guessBrowser() });
+  await nativeRequest({ type: "ping", browser: browser || await guessBrowser() });
 }
 
-function guessBrowser() {
+async function guessBrowser() {
   const ua = navigator.userAgent;
-  if (ua.includes("Edg/")) return "edge";
-  if (ua.includes("OPR/")) return "opera";
-  if (ua.includes("Brave/")) return "brave";
   if (ua.includes("Firefox/")) return "firefox";
+  if (ua.includes("Edg/"))     return "edge";
+  if (ua.includes("OPR/"))     return "opera";
+  // Brave removes itself from the UA string — must use navigator.brave API.
+  if (navigator.brave && await navigator.brave.isBrave()) return "brave";
   return "chrome";
 }

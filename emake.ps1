@@ -24,21 +24,14 @@ function Make-Package($browser, $outFile) {
     # Copy all extension files
     Copy-Item "$src\*" $tmp -Recurse
 
-    # Patch version in manifest
-    $mf = Get-Content "$tmp\manifest.json" -Raw | ConvertFrom-Json
+    # Firefox uses its own manifest; Chrome/Edge use the main one.
+    $baseMf = if ($browser -eq "firefox") "$src\manifest-ff.json" else "$tmp\manifest.json"
+    $mf = Get-Content $baseMf -Raw | ConvertFrom-Json
     $mf.version = $semver
-
-    if ($browser -eq "firefox") {
-        # Remove Chrome-specific "key" field (causes Firefox validation warning)
-        $mf.PSObject.Properties.Remove("key")
-
-        # Add gecko addon ID so the ID is stable across installs
-        $gecko = [PSCustomObject]@{ id = "sesame-pass@szm" }
-        $bss   = [PSCustomObject]@{ gecko = $gecko }
-        $mf | Add-Member -NotePropertyName "browser_specific_settings" -NotePropertyValue $bss -Force
-    }
-
     $mf | ConvertTo-Json -Depth 10 | Set-Content "$tmp\manifest.json" -Encoding utf8
+
+    # manifest-ff.json must not ship inside the Firefox package itself
+    Remove-Item "$tmp\manifest-ff.json" -ErrorAction SilentlyContinue
 
     # Zip into output file
     $fullOut = "$outDir\$outFile"
