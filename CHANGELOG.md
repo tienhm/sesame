@@ -3,6 +3,7 @@
 ## v1.6 — 2026-08-01
 
 ### Added
+- **Browser extension "Sesame Pass" (Chrome, Edge, Firefox)** — auto-fills username/password into web login forms from the Sesame vault. Double-click a field to see matching entries; each shows one guessed button (👤/🔑 based on the field's current `type`), hold Shift to reveal the other field's button too. Connects to the running Sesame app via Chrome/Firefox Native Messaging (a short-lived native-host process relays framed stdin/stdout to a Windows named pipe owned by Sesame) — no pairing code to copy/paste, no per-site permission prompt; trust is established once via a fixed extension ID allow-listed in the native-messaging host registration. Settings → Extensions tab lists detected browsers with live connected/disconnected status
 - **Extension toolbar icon reflects connection state** — colored while the background worker's heartbeat gets a response from Sesame, grayed out otherwise (including right after browser startup, before the first heartbeat has had a chance to run)
 
 ### Removed
@@ -12,8 +13,14 @@
 - **Browser extension: double-click instead of focus** — the autofill suggestion tooltip now appears on double-click of a field instead of on focus, to avoid competing for screen space with the browser's own native password-manager popup (which still reacts to focus)
 - **Browser extension: Shift reveals the other field on demand** — replaced the persistent per-site learned field-mapping with a live escape hatch: while the tooltip is open, holding Shift reveals the non-guessed field's button too (👤 alongside 🔑 or vice versa), so a password can still be pasted into a field a site's own show/hide toggle flipped to `type="text"`, without Sesame needing to remember anything between visits
 
+### Fixed
+- **Brave misidentified as Chrome** — the extension guessed the browser from `navigator.userAgent`, but Brave deliberately reports a plain Chrome UA; now uses the real `navigator.brave.isBrave()` API when present
+- **Console spam when Sesame isn't running** — every failed `connectNative()` attempt (heartbeat retries every 15s while Sesame is down) logged an unread `chrome.runtime.lastError`, `Specified native messaging host not found.`, even though this is the expected "not running yet" case; now read (and swallowed) explicitly
+- **Build could fail on a fresh clone** — `resources/icon.png`/`resources/check.svg` are intentionally not committed to this repo but weren't in `.gitignore` either, so the working tree could silently diverge from what a clone expects; both are now ignored explicitly
+
 ### Security
 - **Extension bridge named pipe locked down to the current user** — `ExtensionServer`'s named pipe (`\\.\pipe\SesamePassExt`) previously used `CreateNamedPipe`'s default security descriptor, which is broad enough that any other process running as the same Windows user (not just the browser's native-messaging host) could connect directly and query/reveal vault secrets, bypassing the browser extension, its `allowed_origins` check, and the native host entirely. The pipe now gets an explicit DACL restricting access to the current user (+ SYSTEM); the server refuses to start rather than fall back to an unrestricted pipe if that descriptor can't be built
+- **Extension `reveal` requests scoped to the requesting domain** — entry IDs are small sequential integers, so a request going straight to the named pipe (bypassing the content script) could previously enumerate every entry's secret by ID alone; the pipe server now checks the requested domain against the entry's saved URL before returning a secret
 
 ## v1.5 — 2026-07-30
 

@@ -6,11 +6,6 @@ function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function appVersion() {
-  const v = chrome.runtime.getManifest().version; // e.g. "1.6.0"
-  return "v" + v.replace(/\.0$/, "");             // → "v1.6"
-}
-
 async function guessBrowser() {
   const ua = navigator.userAgent;
   if (ua.includes("Firefox/")) return "firefox";
