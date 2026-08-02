@@ -175,9 +175,15 @@ class ExtensionServer:
         try:
             pipe_sa = _pipe_security_attributes()
         except Exception:
-            # Fall back to default security rather than failing entirely —
-            # a pipe with default DACL is still functional.
-            logger.exception("ExtensionServer: could not build restricted pipe security descriptor; using default")
+            # win32security unavailable — pipe created with default DACL.
+            # Any same-user process can connect; log at WARNING so this is
+            # visible in production. Root fix: win32security in hiddenimports.
+            logger.warning(
+                "ExtensionServer: pipe security descriptor failed — "
+                "falling back to default DACL (same-user processes can connect). "
+                "Ensure win32security is available.",
+                exc_info=True,
+            )
             pipe_sa = None
 
         while not self._stop:
@@ -249,7 +255,11 @@ class ExtensionServer:
             return {"entries": self._entries_for_domain(str(message.get("domain", "")))}
         if msg_type == "reveal":
             self.bridge.request_received.emit()
-            return self._reveal(str(message.get("entry_id", "")), str(message.get("field", "")))
+            return self._reveal(
+                str(message.get("entry_id", "")),
+                str(message.get("field", "")),
+                str(message.get("domain", "")),
+            )
         return {"error": "invalid_request"}
 
     def _record_ping(self, browser: str) -> None:
@@ -271,9 +281,14 @@ class ExtensionServer:
             if e.url and _domain_matches(e.url, domain)
         ]
 
-    def _reveal(self, entry_id: str, field: str) -> dict:
+    def _reveal(self, entry_id: str, field: str, domain: str = "") -> dict:
         entry = next((e for e in self._vault.entries if e.id == entry_id), None)
         if entry is None:
+            return {"error": "not_found"}
+        # Domain check: the requested entry must belong to the domain the
+        # extension is currently on. Prevents cross-domain enumeration via
+        # direct pipe access (sequential entry IDs make brute-force trivial).
+        if domain and not _domain_matches(entry.url, domain):
             return {"error": "not_found"}
         if self._lock_mgr.is_locked(entry.category):
             return {"error": "locked"}

@@ -210,7 +210,7 @@
   }
 
   async function fillField(el, entryId, field) {
-    const response = await sendToBackground({ type: "reveal", entry_id: entryId, field });
+    const response = await sendToBackground({ type: "reveal", entry_id: entryId, field, domain: location.hostname });
     if (!response) return; // Sesame went away mid-request — fail silently.
     if (response.error === "locked") {
       warningTooltip(el, "That entry is locked in Sesame — unlock it there first");
