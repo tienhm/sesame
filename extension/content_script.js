@@ -94,11 +94,11 @@
     return cachedLiveness;
   }
 
-  // While the tooltip is open, Shift reveals every row's hidden "other"
-  // button (see buildEntryRows); released, they hide again. Scoped to the
-  // tooltip's lifetime — attached in showTooltip(), detached in
-  // removeTooltip() — so there's no page-global Shift listener sitting
-  // around when no tooltip exists.
+  // While the tooltip is open, Shift swaps which button is visible: primary
+  // hides, secondary (the other field type) shows. Released, they swap back.
+  // Scoped to the tooltip's lifetime — attached in showTooltip(), detached in
+  // removeTooltip() — so there's no page-global Shift listener around when
+  // no tooltip exists.
   function attachShiftReveal() {
     shiftKeyHandler = (ev) => {
       if (ev.key !== "Shift" || !tooltipEl) return;
@@ -221,11 +221,8 @@
     removeTooltip();
   }
 
-  // One row per matching entry. Each row gets its guessed button (based on
-  // the field's current `type`, same heuristic as before) visible right
-  // away, plus the other button hidden — only shown while Shift is held
-  // (see attachShiftReveal). Never offer a hidden 👤 button for an entry
-  // with no username.
+  // One row per entry. Primary button: 👤 for text-like fields, 🔑 for
+  // password fields. The other button is hidden and swapped in on Shift.
   function buildEntryRows(root, el, entries) {
     const elType = (el.getAttribute("type") || "text").toLowerCase();
 
@@ -246,15 +243,9 @@
       }
       row.appendChild(labelWrap);
 
-      let guessed;
-      if (elType === "password") {
-        guessed = "password";
-      } else if (entry.username) {
-        guessed = "username";
-      } else {
-        guessed = "password";
-      }
-      const other = guessed === "username" ? "password" : "username";
+      // text/email/tel → propose username; password → propose password.
+      const guessed = elType === "password" ? "password" : "username";
+      const other   = guessed === "username" ? "password" : "username";
 
       const makeButton = (field, hiddenByDefault) => {
         const btn = document.createElement("button");
@@ -266,23 +257,15 @@
         if (hiddenByDefault) btn.dataset.shiftReveal = "1";
         else btn.dataset.shiftPrimary = "1";
         btn.addEventListener("mousedown", async (ev) => {
-          ev.preventDefault(); // keep the field focused
+          ev.preventDefault();
           ev.stopPropagation();
           await fillField(el, entry.id, field);
         });
         return btn;
       };
 
-      const primaryBtn = makeButton(guessed, false);
-      row.appendChild(primaryBtn);
-      const hasSecondary = other !== "username" || !!entry.username;
-      if (hasSecondary) {
-        row.appendChild(makeButton(other, true));
-      } else {
-        // No secondary button exists — don't mark primary as shift-swappable
-        // or Shift will hide the only button with nothing to replace it.
-        delete primaryBtn.dataset.shiftPrimary;
-      }
+      row.appendChild(makeButton(guessed, false));
+      row.appendChild(makeButton(other, true));
       root.appendChild(row);
     });
   }
