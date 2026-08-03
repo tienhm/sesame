@@ -35,6 +35,7 @@ HOST_NAME       = "com.sesame.pass"
 EXTENSION_IDS = [
     "gkfncbifphnljdllbcophdpndkpdlnpi",   # dev-mode/unpacked — derived from "key" in manifest.json
     "fodejgdgiblhbcgobpafejgammblelje",   # Chrome Web Store — assigned by Google on publish
+    "ffjpckajjmidkbdggomjaiinfeekhkhm",   # Microsoft Edge Add-ons Store — CRX ID
 ]
 FIREFOX_ADDON_ID = "sesame-pass@szm"                   # Firefox — set in browser_specific_settings.gecko.id
 
