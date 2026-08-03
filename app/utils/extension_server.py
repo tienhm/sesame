@@ -276,7 +276,7 @@ class ExtensionServer:
 
     def _entries_for_domain(self, domain: str) -> list[dict]:
         return [
-            {"id": e.id, "name": e.name, "has_username": bool(e.username), "has_otp": e.has_otp}
+            {"id": e.id, "name": e.name, "username": e.username or "", "has_otp": e.has_otp}
             for e in self._vault.entries
             if e.url and _domain_matches(e.url, domain)
         ]

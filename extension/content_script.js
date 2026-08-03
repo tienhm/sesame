@@ -232,15 +232,24 @@
     entries.forEach((entry) => {
       const row = document.createElement("div");
       row.style.cssText = "display:flex; gap:4px; align-items:center; margin:2px 0;";
-      const label = document.createElement("span");
+      const labelWrap = document.createElement("div");
+      labelWrap.style.cssText = "flex:1; overflow:hidden; min-width:0;";
+      const label = document.createElement("div");
       label.textContent = entry.name;
-      label.style.cssText = "flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
-      row.appendChild(label);
+      label.style.cssText = "overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+      labelWrap.appendChild(label);
+      if (entry.username) {
+        const sub = document.createElement("div");
+        sub.textContent = entry.username;
+        sub.style.cssText = "overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; color:#adb5bd; margin-top:1px;";
+        labelWrap.appendChild(sub);
+      }
+      row.appendChild(labelWrap);
 
       let guessed;
       if (elType === "password") {
         guessed = "password";
-      } else if (entry.has_username) {
+      } else if (entry.username) {
         guessed = "username";
       } else {
         guessed = "password";
@@ -266,7 +275,7 @@
 
       const primaryBtn = makeButton(guessed, false);
       row.appendChild(primaryBtn);
-      const hasSecondary = other !== "username" || entry.has_username;
+      const hasSecondary = other !== "username" || !!entry.username;
       if (hasSecondary) {
         row.appendChild(makeButton(other, true));
       } else {
